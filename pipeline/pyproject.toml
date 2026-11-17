@@ -5,7 +5,11 @@ description = "Builds Within Reach's public lookup bundles (postcodes, pharmacie
 readme = "README.md"
 license = "AGPL-3.0-only"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "httpx>=0.28.1",
+    "numpy>=2.5.5",
+    "scipy>=1.18.1",
+]
 
 [project.scripts]
 within-reach-pipeline = "within_reach_pipeline:main"

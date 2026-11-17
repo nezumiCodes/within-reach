@@ -1,0 +1,17 @@
+# Within Reach pipeline settings (spec FR-02, FR-03, FR-04; decisions in docs/decisions.md).
+
+[catchment]
+radius_m = 5000         # every pharmacy within this straight-line distance...
+max_candidates = 40     # ...capped at the nearest 40 in dense areas...
+min_candidates = 5      # ...and always at least the nearest 5, however far
+
+[release]
+max_file_bytes = 25_165_824   # 24 MiB: headroom under Cloudflare Pages' 25 MiB per-file limit
+count_tolerance = 0.10        # counts per nation must be within ±10% of the previous release
+geocode_failure_limit = 0.01  # at most 1% of a nation's pharmacies may fail to geocode
+
+[routing]
+osrm_image = "ghcr.io/project-osrm/osrm-backend:v26.11.0-debian"
+
+[http]
+user_agent = "within-reach-pipeline (+https://withinreach.vasnik.net)"
