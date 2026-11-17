@@ -34,3 +34,4 @@ files = ["src", "tests"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = ["osrm: needs Docker, network and RUN_OSRM=1"]
