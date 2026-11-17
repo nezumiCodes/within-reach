@@ -148,6 +148,9 @@ def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
     check_cmd.add_argument("--release-dir", type=Path, required=True)
     check_cmd.add_argument("--previous-dir", type=Path, default=None)
     check_cmd.add_argument("--reference", type=Path, default=None)
+    check_cmd.add_argument(
+        "--allow-partial", action="store_true", help="accept a release that skips areas"
+    )
 
     args = parser.parse_args(list(argv))
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -176,7 +179,9 @@ def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
     elif args.command == "check":
         from within_reach_pipeline.checks import run_checks
 
-        failures = run_checks(args.release_dir, load_config(), args.previous_dir, args.reference)
+        failures = run_checks(
+            args.release_dir, load_config(), args.previous_dir, args.reference, args.allow_partial
+        )
         for failure in failures:
             log.error("CHECK FAILED [%s] %s", failure.check, failure.detail)
         if failures:

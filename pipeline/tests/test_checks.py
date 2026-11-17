@@ -151,3 +151,43 @@ def test_cli_check_exit_codes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     manifest["directory"]["sha256"] = "0" * 64
     _save(release, manifest)
     assert cli.run(["check", "--release-dir", str(release)]) == 1
+
+
+def _partial_release(tmp_path: Path) -> Path:
+    out = tmp_path / "partial"
+    cache = make_cache(tmp_path)
+    argv = [
+        "build",
+        "--cache",
+        str(cache),
+        "--release",
+        "2026-11",
+        "--out",
+        str(out),
+        "--router",
+        "fake",
+        "--built-at",
+        "2026-11-02T03:00:00Z",
+        "--areas",
+        "E06000050",
+    ]
+    assert cli.run(argv) == 0
+    return out
+
+
+def test_partial_release_fails_completeness(tmp_path: Path) -> None:
+    release = _partial_release(tmp_path)
+    failures = run_checks(release, CONFIG, None, None)
+    assert _only(failures) == "complete"
+    assert "S12000049" in failures[0].detail and "W11000023" in failures[0].detail
+
+
+def test_partial_release_allowed_explicitly(tmp_path: Path) -> None:
+    release = _partial_release(tmp_path)
+    assert run_checks(release, CONFIG, None, None, allow_partial=True) == []
+
+
+def test_manifest_lists_all_areas(tmp_path: Path) -> None:
+    manifest = _manifest(_partial_release(tmp_path))
+    assert manifest["all_area_codes"] == ["E06000050", "S12000049", "W11000023"]
+    assert manifest["complete"] is False

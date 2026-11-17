@@ -146,4 +146,6 @@ def merge_manifests(base: dict[str, Any], shards: Sequence[dict[str, Any]]) -> d
             raise ValueError("shard was built from a different pharmacy directory")
         areas.extend(shard["areas"])
     merged["areas"] = sorted(areas, key=lambda a: a["code"])
+    if "all_area_codes" in base:
+        merged["complete"] = [a["code"] for a in merged["areas"]] == base["all_area_codes"]
     return merged

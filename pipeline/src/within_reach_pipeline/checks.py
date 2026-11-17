@@ -186,12 +186,24 @@ def _check_reference(
     return failures
 
 
+def _check_complete(manifest: dict[str, Any]) -> list[CheckFailure]:
+    built = {a["code"] for a in manifest["areas"]}
+    missing = sorted(set(manifest.get("all_area_codes", [])) - built)
+    if not missing:
+        return []
+    shown = " ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")
+    return [CheckFailure("complete", f"{len(missing)} areas not built: {shown}")]
+
+
 def run_checks(
     release_dir: Path,
     config: PipelineConfig,
     previous_dir: Path | None,
     reference: Path | None,
+    allow_partial: bool = False,
 ) -> list[CheckFailure]:
+    """Run every release check. A partial release (not every area built) fails unless
+    allow_partial is set; partial releases must never be served as production data."""
     manifest = json.loads((release_dir / "manifest.json").read_text(encoding="utf-8"))
     failures = _check_files(release_dir, manifest, config.max_file_bytes)
     if any(f.check == "checksums" and "missing" in f.detail for f in failures):
@@ -201,6 +213,8 @@ def run_checks(
     failures += _check_min_candidates(release_dir, manifest, config)
     failures += _check_geocode(manifest, config.geocode_failure_limit)
     failures += _check_distance_selling(manifest, config)
+    if not allow_partial:
+        failures += _check_complete(manifest)
     if previous_dir is not None:
         previous = json.loads((previous_dir / "manifest.json").read_text(encoding="utf-8"))
         failures += _check_counts(manifest, previous, config.count_tolerance)

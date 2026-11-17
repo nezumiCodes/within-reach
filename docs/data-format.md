@@ -61,6 +61,7 @@ The manifest records:
 - the number of opening-hours values that couldn't be read
 - the number of online-only pharmacies excluded
 - for each area: its code, name, nation, postcode count, pair count, and each file's path, SHA-256 and size
+- `all_area_codes` (every area in Great Britain) and `complete`, which is true only when every one of them was built. Partial releases are published under a `data-YYYY-MM-partial` tag for testing and are never served by the site.
 
 The app checks every file it downloads against these checksums.
 

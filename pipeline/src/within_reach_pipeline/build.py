@@ -157,6 +157,8 @@ def build_release(
         "hours_warnings": directory.hours_warnings,
         "excluded_distance_selling": directory.excluded_distance_selling,
         "areas": area_entries,
+        "all_area_codes": sorted(by_area),
+        "complete": sorted(a["code"] for a in area_entries) == sorted(by_area),
     }
     write_manifest(out, manifest)
     return manifest
