@@ -40,3 +40,6 @@ app/node_modules/.tmp/
 pipeline/data/
 pipeline/build/
 pipeline/.cache/
+
+# Local pipeline logs
+pipeline/*.log

@@ -93,3 +93,17 @@ def test_build_rejects_bad_release(tmp_path: Path) -> None:
         cli.run(
             ["build", "--cache", str(tmp_path), "--release", "../x", "--out", str(tmp_path / "o")]
         )
+
+
+def test_areas_command_prints_shards(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    cache = make_cache(tmp_path)
+    assert cli.run(["areas", "--cache", str(cache), "--shard-size", "2"]) == 0
+    assert json.loads(capsys.readouterr().out) == ["E06000050 S12000049", "W11000023"]
+
+
+def test_areas_command_honours_explicit_list(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cache = make_cache(tmp_path)
+    assert cli.run(["areas", "--cache", str(cache), "--only", "W11000023", "E06000050"]) == 0
+    assert json.loads(capsys.readouterr().out) == ["E06000050 W11000023"]

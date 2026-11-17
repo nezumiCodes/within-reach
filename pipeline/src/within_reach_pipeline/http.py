@@ -23,7 +23,7 @@ class HttpxFetcher:
         self,
         user_agent: str,
         transport: httpx.BaseTransport | None = None,
-        retries: int = 3,
+        retries: int = 5,
         backoff_s: float = 2.0,
         timeout_s: float = 60.0,
     ) -> None:
@@ -51,7 +51,7 @@ class HttpxFetcher:
                     raise
             if attempt == self._retries:
                 response.raise_for_status()
-            time.sleep(self._backoff_s * attempt)
+            time.sleep(self._backoff_s * 2 ** (attempt - 1))
         raise RuntimeError("unreachable")
 
     def get_json(self, url: str, params: dict[str, str] | None = None) -> Any:
@@ -78,6 +78,6 @@ class HttpxFetcher:
             except (httpx.TransportError, httpx.HTTPStatusError):
                 if attempt == self._retries:
                     raise
-                time.sleep(self._backoff_s * attempt)
+                time.sleep(self._backoff_s * 2 ** (attempt - 1))
         part.replace(dest)
         return digest.hexdigest()

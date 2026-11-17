@@ -133,6 +133,11 @@ def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
     merge_cmd.add_argument("--out", type=Path, required=True)
     merge_cmd.add_argument("shards", type=Path, nargs="+")
 
+    areas_cmd = commands.add_parser("areas", help="print area codes as JSON shards for CI")
+    areas_cmd.add_argument("--cache", type=Path, required=True)
+    areas_cmd.add_argument("--shard-size", type=int, default=10)
+    areas_cmd.add_argument("--only", nargs="*", default=None, help="limit to these area codes")
+
     check_cmd = commands.add_parser("check", help="run the release checks (FR-04)")
     check_cmd.add_argument("--release-dir", type=Path, required=True)
     check_cmd.add_argument("--previous-dir", type=Path, default=None)
@@ -152,6 +157,16 @@ def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
         )
     elif args.command == "merge":
         merge(args.out, args.shards)
+    elif args.command == "areas":
+        known = sorted({p.area_code for p in read_onspd(onspd_csv(args.cache))})
+        wanted = known if not args.only else sorted(set(args.only))
+        unknown = sorted(set(wanted) - set(known))
+        if unknown:
+            log.error("unknown area codes: %s", " ".join(unknown))
+            return 2
+        size = max(1, args.shard_size)
+        shards = [" ".join(wanted[i : i + size]) for i in range(0, len(wanted), size)]
+        print(json.dumps(shards))
     elif args.command == "check":
         from within_reach_pipeline.checks import run_checks
 

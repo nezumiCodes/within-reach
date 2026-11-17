@@ -52,3 +52,17 @@ def test_get_json_asks_for_json() -> None:
 
     HttpxFetcher(UA, transport=httpx.MockTransport(handler)).get_json("https://example.test")
     assert seen["accept"] == "application/json"
+
+
+def test_dropped_connections_retried_five_times() -> None:
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] < 5:
+            raise httpx.RemoteProtocolError("Server disconnected", request=request)
+        return httpx.Response(200, json={"ok": 1})
+
+    fetcher = HttpxFetcher(UA, transport=httpx.MockTransport(handler), backoff_s=0)
+    assert fetcher.get_json("https://example.test/api") == {"ok": 1}
+    assert calls["n"] == 5
