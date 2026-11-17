@@ -1,6 +1,8 @@
 """Wales: active pharmacies from the NHS ODS ORD API (OGL), resolving decision D15. No hours."""
 
+import json
 import time
+from pathlib import Path
 from typing import Any
 
 from within_reach_pipeline.http import Fetcher
@@ -55,3 +57,18 @@ def fetch_ods_wales(
             break
         offset += PAGE_SIZE
     return pharmacies
+
+
+def save_ods_wales(pharmacies: list[RawPharmacy], path: Path) -> None:
+    rows = [
+        {"code": p.code, "name": p.name, "address": list(p.address), "postcode": p.postcode}
+        for p in pharmacies
+    ]
+    path.write_text(json.dumps(rows, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def load_ods_wales(path: Path) -> list[RawPharmacy]:
+    return [
+        RawPharmacy("Wales", r["code"], r["name"], tuple(r["address"]), r["postcode"], None)
+        for r in json.loads(path.read_text(encoding="utf-8"))
+    ]

@@ -1,0 +1,45 @@
+import json
+from pathlib import Path
+
+from fakes import FakeFetcher, onspd_zip_bytes
+
+from within_reach_pipeline import cli
+from within_reach_pipeline.pharmacies.wales import load_ods_wales
+
+
+def test_cli_fetch_writes_cache(tmp_path: Path) -> None:
+    fetcher = FakeFetcher(
+        downloads={
+            "arcgis.com/sharing/rest/content/items": onspd_zip_bytes(tmp_path),
+            "consol_pharmacy_list": b"nhsbsa",
+            "contractor_details": b"contractor",
+            "dispenser_contactdetails": b"phs",
+            "geofabrik": b"pbf",
+        }
+    )
+    cache = tmp_path / "cache"
+    assert cli.run(["fetch", "--cache", str(cache)], fetcher=fetcher) == 0
+
+    sources = json.loads((cache / "sources.json").read_text())
+    names = [s["name"] for s in sources]
+    assert names == ["onspd", "nhsbsa", "contractor_details", "phs", "osm", "ods_wales"]
+    assert all(set(s) == {"name", "label", "url", "sha256"} for s in sources)
+    for filename in ["nhsbsa.csv", "contractor_details.csv", "phs.csv", "uk.osm.pbf"]:
+        assert (cache / filename).exists()
+    assert (cache / "onspd" / "Data" / "ONSPD_TEST_2026_UK.csv").exists()
+    assert len(list((cache / "onspd" / "Documents").glob("*.csv"))) == 3
+    assert not (cache / "onspd" / "User Guide").exists()
+
+    # Only LL11 1AA is Welsh in the ONSPD fixture, and the ODS fixture's Welsh pharmacy is in
+    # LL11 4UF, so the ODS list must be matched against Welsh postcodes from ONSPD.
+    welsh = load_ods_wales(cache / "ods_wales.json")
+    assert welsh == []
+
+
+def test_ods_wales_roundtrip(tmp_path: Path) -> None:
+    from within_reach_pipeline.models import RawPharmacy
+    from within_reach_pipeline.pharmacies.wales import save_ods_wales
+
+    items = [RawPharmacy("Wales", "FWF56", "ROWLANDS", ("A", "B"), "LL11 4UF", None)]
+    save_ods_wales(items, tmp_path / "w.json")
+    assert load_ods_wales(tmp_path / "w.json") == items

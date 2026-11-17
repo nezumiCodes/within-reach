@@ -1,5 +1,9 @@
 """Within Reach pipeline: turns public data into static lookup bundles. Public data only."""
 
+import sys
+
 
 def main() -> None:
-    print("within-reach-pipeline: no stages implemented yet (Phase 1).")
+    from within_reach_pipeline import cli
+
+    sys.exit(cli.run(sys.argv[1:]))

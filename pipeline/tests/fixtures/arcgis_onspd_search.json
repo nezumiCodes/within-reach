@@ -1,0 +1,64 @@
+{
+ "results": [
+  {
+   "id": "9e5a92a3cfb14dc7ad43d6ea7a7b8c7f",
+   "title": "ONS Postcode Directory (August 2026)",
+   "type": "CSV Collection",
+   "modified": 1788775767000
+  },
+  {
+   "id": "920df475305b4b6baa9c3cab10813ca7",
+   "title": "ONS Postcode Directory (August 2026) User Guide",
+   "type": "CSV Collection",
+   "modified": 1788262725000
+  },
+  {
+   "id": "6fff67d204fd4f339591ed667a6e3642",
+   "title": "ONS Postcode Directory (May 2026)",
+   "type": "CSV Collection",
+   "modified": 1780564380000
+  },
+  {
+   "id": "5f31ff4fc7624f9dabcc8148da88ba9e",
+   "title": "ONS Postcode Directory (May 2026) User Guide",
+   "type": "CSV Collection",
+   "modified": 1780049568000
+  },
+  {
+   "id": "481c020d6e824b628b18359d733e8cd5",
+   "title": "ONS Postcode Directory (February 2026) User Guide",
+   "type": "CSV Collection",
+   "modified": 1772532816000
+  },
+  {
+   "id": "3080229224424c9cb53c0b48f5a64d27",
+   "title": "ONS Postcode Directory (February 2026) for the UK",
+   "type": "CSV Collection",
+   "modified": 1772444947000
+  },
+  {
+   "id": "10005820ffcb4d96b2b39f2d8bf0de92",
+   "title": "ONS Postcode Directory (November 2025) User Guide",
+   "type": "CSV Collection",
+   "modified": 1765270347000
+  },
+  {
+   "id": "ca3396864fee4f5186046150f0e9092f",
+   "title": "ONS Postcode Directory (May 2025) User Guide",
+   "type": "CSV Collection",
+   "modified": 1765270343000
+  },
+  {
+   "id": "aa9271a697ae43d2af152765af9f159d",
+   "title": "ONS Postcode Directory (August 2025) User Guide",
+   "type": "CSV Collection",
+   "modified": 1765270335000
+  },
+  {
+   "id": "3635ca7f69df4733af27caf86473ffa1",
+   "title": "ONS Postcode Directory (November 2025) for the UK",
+   "type": "CSV Collection",
+   "modified": 1764756923000
+  }
+ ]
+}
