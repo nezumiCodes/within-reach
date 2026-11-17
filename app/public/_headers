@@ -1,0 +1,20 @@
+# Security headers for Cloudflare Pages (spec NFR-01, NFR-02; plan S-1).
+# The same headers are applied to `vite preview` (see vite.config.ts), so the
+# browser tests run under the real policy.
+#
+# 'wasm-unsafe-eval' is deliberately absent until a WebAssembly dependency
+# (HiGHS, parquet-wasm) is added in Phase 2/3. Add it to script-src then.
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests
+  Strict-Transport-Security: max-age=63072000; includeSubDomains
+  Referrer-Policy: no-referrer
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=(), interest-cohort=(), browsing-topics=()
+
+# Keep preview deployments out of search engines.
+https://:project.pages.dev/*
+  X-Robots-Tag: noindex

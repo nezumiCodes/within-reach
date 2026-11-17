@@ -1,0 +1,4 @@
+client_ref,home_postcode,alt_postcode,current_pharmacy_id,current_pharmacy_nation,supervision,wheelchair_user,needs_step_free,prefers_public_transport,language,reason_code,team
+SYN-0001,CH1 1AA,,FAA00,England,daily_7,No,No,No,,,North
+SYN-0002,LL11 1AA,,,,less_often,Yes,Yes,No,cy,access,North
+SYN-0003,BT1 1AA,,,,daily_6,No,No,Yes,,,South

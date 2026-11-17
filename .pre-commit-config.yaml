@@ -1,0 +1,32 @@
+# Install once with: uvx pre-commit install
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: no-real-client-data
+        name: Block real-looking client data (NFR-06)
+        entry: python3 scripts/check_client_data.py
+        language: system
+        files: '\.(csv|tsv|xlsx|xls|xlsm|ods)$'
+
+      - id: ruff
+        name: ruff (lint)
+        entry: uv run --project pipeline ruff check --force-exclude
+        language: system
+        types: [python]
+
+      - id: ruff-format
+        name: ruff (format)
+        entry: uv run --project pipeline ruff format --check --force-exclude
+        language: system
+        types: [python]
+
+      - id: prettier
+        name: prettier (app)
+        entry: bash -c 'cd app && npx prettier --check --ignore-unknown "${@#app/}"' --
+        language: system
+        files: '^app/'

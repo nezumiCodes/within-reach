@@ -1,0 +1,40 @@
+# OS and editors
+.DS_Store
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Node / app
+node_modules/
+app/dist/
+app/test-results/
+app/playwright-report/
+app/node_modules/.tmp/
+
+# Secrets: never commit
+.env
+.env.*
+*.pem
+*.key
+.dev.vars
+.wrangler/
+
+# Client data: never commit. Synthetic fixtures live in fixtures/synthetic/ only.
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.xlsm
+*.ods
+!fixtures/synthetic/**
+
+# Pipeline outputs (published to the host, not the repo)
+pipeline/data/
+pipeline/build/

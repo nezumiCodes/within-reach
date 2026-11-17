@@ -1,0 +1,54 @@
+name: Live site check
+
+# Checks the deployed site's headers, CSP and privacy guard (plan T-16, S-2).
+# Catches Cloudflare features that inject scripts (Web Analytics, Rocket Loader, Email Obfuscation).
+# The daily run is enabled by setting the repository variable LIVE_CHECK_ENABLED=true
+# once withinreach.vasnik.net is live.
+on:
+  workflow_run:
+    workflows: [Deploy]
+    types: [completed]
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    if: vars.LIVE_CHECK_ENABLED == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    env:
+      LIVE_URL: https://withinreach.vasnik.net
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: No injected Cloudflare scripts
+        run: |
+          html=$(curl -fsSL "$LIVE_URL/")
+          if echo "$html" | grep -Eiq 'cloudflareinsights|rocket-loader|email-decode|/cdn-cgi/'; then
+            echo "Cloudflare has injected a script into the page. Turn the feature off (plan S-2)."; exit 1
+          fi
+      - name: Headers present
+        run: |
+          headers=$(curl -fsSI "$LIVE_URL/")
+          echo "$headers"
+          for h in 'content-security-policy:' 'strict-transport-security:' 'referrer-policy: no-referrer' 'x-content-type-options: nosniff'; do
+            echo "$headers" | grep -iq "^$h" || { echo "Missing: $h"; exit 1; }
+          done
+          echo "$headers" | grep -i '^content-security-policy:' | grep -q 'upgrade-insecure-requests' || { echo "CSP missing upgrade-insecure-requests"; exit 1; }
+          if echo "$headers" | grep -iq '^set-cookie:'; then echo "The site set a cookie"; exit 1; fi
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Privacy guard and CSP tests against the live site
+        run: npx playwright test --project=chromium
