@@ -24,7 +24,8 @@ permissions:
   deployments: write
 
 concurrency:
-  group: deploy
+  # One queue per trigger and ref, so a push to main can't displace a monthly production redeploy.
+  group: deploy-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -33,7 +34,9 @@ jobs:
     # Pages project and the two secrets exist (see docs/phase-0-setup.md).
     if: >-
       vars.DEPLOY_ENABLED == 'true' &&
-      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main'))
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -45,7 +48,9 @@ jobs:
           REF: ${{ github.ref }}
         run: |
           if [ "$EVENT" = "workflow_run" ] || { [ "$EVENT" = "workflow_dispatch" ] && [ "$REF" = "refs/heads/main" ]; }; then
-            tag=$(gh api "repos/$GITHUB_REPOSITORY/tags" --jq '[.[].name | select(startswith("v"))] | first // ""')
+            # Highest version tag by semantic order (the tags API is neither sorted nor complete).
+            tag=$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v" \
+              --jq '.[].ref | sub("^refs/tags/"; "")' | sort -V | tail -1)
           fi
           if [ -n "${tag:-}" ]; then
             echo "ref=refs/tags/$tag" >> "$GITHUB_OUTPUT"; echo "branch=main" >> "$GITHUB_OUTPUT"

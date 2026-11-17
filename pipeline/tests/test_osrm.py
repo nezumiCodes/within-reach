@@ -26,3 +26,21 @@ def test_osrm_rutland_end_to_end(tmp_path: Path) -> None:
         result = OsrmRouter(base_url, fetcher, profile="foot").table([OAKHAM], [UPPINGHAM])
     walk_m = result.distances_m[0][0]
     assert walk_m is not None and 9_000 <= walk_m <= 14_000
+
+
+def test_osrm_accepts_large_tables(tmp_path: Path) -> None:
+    """250 sources x 200 destinations (a ~10 KB URL), larger than any tile the pipeline sends."""
+    import random
+
+    config = load_config()
+    fetcher = HttpxFetcher(config.user_agent)
+    pbf = tmp_path / "rutland.osm.pbf"
+    fetcher.download(RUTLAND, pbf)
+    rng = random.Random(1)  # noqa: S311 - test coordinates, not security
+
+    def points(n: int) -> list[tuple[float, float]]:
+        return [(rng.uniform(52.56, 52.74), rng.uniform(-0.80, -0.50)) for _ in range(n)]
+
+    with osrm_server(pbf, "foot", config.osrm_image, port=5092) as base_url:
+        result = OsrmRouter(base_url, fetcher, profile="foot").table(points(250), points(200))
+    assert len(result.distances_m) == 250 and len(result.distances_m[0]) == 200

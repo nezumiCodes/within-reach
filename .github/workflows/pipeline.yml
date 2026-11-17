@@ -35,6 +35,7 @@ jobs:
     timeout-minutes: 60
     outputs:
       shards: ${{ steps.shards.outputs.shards }}
+      partial: ${{ steps.shards.outputs.partial }}
       release: ${{ steps.release.outputs.release }}
     defaults:
       run:
@@ -61,10 +62,13 @@ jobs:
       - id: shards
         env:
           INPUT_AREAS: ${{ inputs.areas }}
-          PRIVATE_REPO: ${{ github.event.repository.private }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Scheduled events carry no repository object, so ask the API whether we're private.
+          private=$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)
           areas="$INPUT_AREAS"
-          if [ -z "$areas" ] && [ "$PRIVATE_REPO" = "true" ]; then areas="$REFERENCE_AREAS"; fi
+          if [ -z "$areas" ] && [ "$private" = "true" ]; then areas="$REFERENCE_AREAS"; fi
+          echo "partial=$([ -n "$areas" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           if [ -n "$areas" ]; then
             # shellcheck disable=SC2086
             shards=$(uv run within-reach-pipeline areas --cache .cache --only $areas)
@@ -124,6 +128,7 @@ jobs:
       contents: write # create the release and record it in data/RELEASES.md
     env:
       RELEASE: ${{ needs.prepare.outputs.release }}
+      PARTIAL: ${{ needs.prepare.outputs.partial }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     defaults:
       run:
@@ -149,8 +154,10 @@ jobs:
       - name: Previous release
         id: previous
         run: |
+          # Full releases only (data-YYYY-MM), excluding the month being built.
           previous=$(gh release list --limit 50 --json tagName \
-            --jq '[.[].tagName | select(startswith("data-"))] | sort | last // ""')
+            --jq '[.[].tagName | select(test("^data-[0-9]{4}-[0-9]{2}$"))
+                  | select(. != "data-'"$RELEASE"'")] | sort | last // ""')
           if [ -n "$previous" ]; then
             gh release download "$previous" --pattern '*.tar.gz' --dir previous
             tar -xzf previous/*.tar.gz -C previous
@@ -163,25 +170,33 @@ jobs:
           args=(--release-dir "release/$RELEASE")
           [ -n "$PREVIOUS_DIR" ] && args+=(--previous-dir "$PREVIOUS_DIR")
           [ -f reference/expectations.toml ] && args+=(--reference reference/expectations.toml)
+          [ "$PARTIAL" = "true" ] && args+=(--allow-partial)
           uv run within-reach-pipeline check "${args[@]}"
       - name: Publish release
+        # Only main publishes. Partial runs get a -partial prerelease tag, which deploy never serves.
+        if: github.ref == 'refs/heads/main'
         run: |
-          tar -czf "data-$RELEASE.tar.gz" -C release "$RELEASE"
-          sha256sum "data-$RELEASE.tar.gz" > "data-$RELEASE.tar.gz.sha256"
-          gh release create "data-$RELEASE" "data-$RELEASE.tar.gz" "data-$RELEASE.tar.gz.sha256" \
-            --title "Data release $RELEASE" \
+          tag="data-$RELEASE"; extra=()
+          if [ "$PARTIAL" = "true" ]; then tag="data-$RELEASE-partial"; extra=(--prerelease); fi
+          tar -czf "$tag.tar.gz" -C release "$RELEASE"
+          sha256sum "$tag.tar.gz" > "$tag.tar.gz.sha256"
+          gh release create "$tag" "$tag.tar.gz" "$tag.tar.gz.sha256" "${extra[@]}" \
+            --title "Data release $RELEASE$([ "$PARTIAL" = "true" ] && echo ' (partial)')" \
             --notes "Automated data release. See manifest.json inside for sources and checksums."
       - name: Record release (keeps the monthly schedule active)
+        if: github.ref == 'refs/heads/main'
         working-directory: .
         run: |
           mkdir -p data
           [ -f data/RELEASES.md ] || printf '# Data releases\n\n' > data/RELEASES.md
-          echo "- data-$RELEASE published $(date -u +%Y-%m-%dT%H:%MZ)" >> data/RELEASES.md
+          suffix=""; [ "$PARTIAL" = "true" ] && suffix="-partial (prerelease)"
+          echo "- data-$RELEASE$suffix published $(date -u +%Y-%m-%dT%H:%MZ)" >> data/RELEASES.md
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/RELEASES.md
           git commit -m "data: record release data-$RELEASE"
-          git push
+          git pull --rebase origin main
+          git push origin HEAD:main
 
   alert:
     needs: [prepare, build, assemble]
@@ -197,4 +212,4 @@ jobs:
         run: |
           gh issue create --repo "$GITHUB_REPOSITORY" \
             --title "Data pipeline failed ($(date -u +%Y-%m-%d))" \
-            --body "The monthly data pipeline failed, so nothing was published and the previous release stays live. Run: $RUN_URL"
+            --body "The monthly data pipeline failed. If the failure was before the 'Publish release' step, nothing was published and the previous release stays live; otherwise check the Releases page. Run: $RUN_URL"
