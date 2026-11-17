@@ -8,7 +8,9 @@ min_candidates = 5      # ...and always at least the nearest 5, however far
 [release]
 max_file_bytes = 25_165_824   # 24 MiB: headroom under Cloudflare Pages' 25 MiB per-file limit
 count_tolerance = 0.10        # counts per nation must be within ±10% of the previous release
-geocode_failure_limit = 0.01  # at most 1% of a nation's pharmacies may fail to geocode
+# At most 2% of a nation's pharmacies may fail to geocode. Real lists run at about 1%
+# (new or mistyped postcodes); a format change would push this far higher.
+geocode_failure_limit = 0.02
 # Online-only pharmacies excluded (471 matched in October 2026). Outside this range, the
 # NHSBSA Contractor Details format has probably changed.
 distance_selling_min = 200

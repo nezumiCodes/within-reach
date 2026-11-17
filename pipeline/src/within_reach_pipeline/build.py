@@ -25,7 +25,7 @@ from within_reach_pipeline.pharmacies import build_directory
 from within_reach_pipeline.pharmacies.england import read_distance_selling_codes, read_nhsbsa
 from within_reach_pipeline.pharmacies.scotland import read_phs
 from within_reach_pipeline.pharmacies.wales import load_ods_wales
-from within_reach_pipeline.routing import Router, route_candidates
+from within_reach_pipeline.routing import Router, TravelRow, route_candidates
 from within_reach_pipeline.routing.fake import FakeRouter
 
 log = logging.getLogger(__name__)
@@ -57,6 +57,14 @@ def _routers(
     walk_url = stack.enter_context(osrm_server(pbf, "foot", config.osrm_image, 5101))
     drive_url = stack.enter_context(osrm_server(pbf, "car", config.osrm_image, 5102))
     return OsrmRouter(walk_url, fetcher, "foot"), OsrmRouter(drive_url, fetcher, "car")
+
+
+def postcodes_without_walk(rows: Sequence[TravelRow]) -> int:
+    """Postcodes with no walking route to any candidate: a sign of OSM footpath gaps (R6)."""
+    walkable: dict[int, bool] = {}
+    for row in rows:
+        walkable[row.pc_idx] = walkable.get(row.pc_idx, False) or row.walk_m is not None
+    return sum(1 for ok in walkable.values() if not ok)
 
 
 def build_release(
@@ -128,6 +136,7 @@ def build_release(
                 "nation": area_postcodes[0].nation,
                 "postcodes": len(area_postcodes),
                 "pairs": len(rows),
+                "postcodes_without_walk": postcodes_without_walk(rows),
                 "files": {"postcodes": postcode_info.as_dict(), "travel": travel_info.as_dict()},
             }
         )

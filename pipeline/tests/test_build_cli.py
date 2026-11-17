@@ -107,3 +107,21 @@ def test_areas_command_honours_explicit_list(
     cache = make_cache(tmp_path)
     assert cli.run(["areas", "--cache", str(cache), "--only", "W11000023", "E06000050"]) == 0
     assert json.loads(capsys.readouterr().out) == ["E06000050 W11000023"]
+
+
+def test_manifest_counts_postcodes_without_walking_route(tmp_path: Path) -> None:
+    from within_reach_pipeline.build import postcodes_without_walk
+    from within_reach_pipeline.routing import TravelRow
+
+    rows = [
+        TravelRow(0, 1, 100, None, None, 60),
+        TravelRow(0, 2, 200, None, None, 90),
+        TravelRow(1, 1, 150, 190, 140, 70),
+        TravelRow(1, 2, 300, None, None, 99),
+    ]
+    assert postcodes_without_walk(rows) == 1  # postcode 0 has no walking route at all
+
+
+def test_area_entry_has_no_walk_count(tmp_path: Path) -> None:
+    manifest = _build(make_cache(tmp_path), tmp_path / "out", "ALL")
+    assert all(a["postcodes_without_walk"] == 0 for a in manifest["areas"])
