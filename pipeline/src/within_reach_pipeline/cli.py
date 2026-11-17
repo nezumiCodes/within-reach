@@ -16,7 +16,8 @@ from within_reach_pipeline.bundle import merge_manifests, write_manifest
 from within_reach_pipeline.config import load_config
 from within_reach_pipeline.http import Fetcher, HttpxFetcher
 from within_reach_pipeline.onspd import read_onspd
-from within_reach_pipeline.pharmacies.wales import fetch_ods_wales, save_ods_wales
+from within_reach_pipeline.pharmacies.england import read_nhsbsa
+from within_reach_pipeline.pharmacies.wales import fetch_ods_wales, postcode_area, save_ods_wales
 from within_reach_pipeline.sources import (
     OSM_UK_URL,
     SourceRelease,
@@ -77,14 +78,19 @@ def fetch(cache: Path, fetcher: Fetcher) -> list[dict[str, str]]:
     record(latest_phs(fetcher), PHS_FILE)
     record(SourceRelease("osm", "Geofabrik united-kingdom-latest", OSM_UK_URL), OSM_FILE)
 
-    welsh_postcodes = {p.postcode for p in read_onspd(onspd_csv(cache)) if p.nation == "Wales"}
-    log.info("fetching Welsh pharmacies from NHS ODS")
+    welsh_areas = {
+        postcode_area(p.postcode) for p in read_onspd(onspd_csv(cache)) if p.nation == "Wales"
+    }
+    english, _ = read_nhsbsa(cache / NHSBSA_FILE)
+    log.info("fetching Welsh pharmacies from NHS ODS (postcode areas %s)", sorted(welsh_areas))
     ods_path = cache / ODS_WALES_FILE
-    save_ods_wales(fetch_ods_wales(fetcher, welsh_postcodes), ods_path)
+    welsh = fetch_ods_wales(fetcher, welsh_areas, frozenset(p.code for p in english))
+    save_ods_wales(welsh, ods_path)
+    fetched_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     sources.append(
         {
             "name": "ods_wales",
-            "label": "NHS ODS ORD API, active pharmacies (RO182) with Welsh postcodes",
+            "label": f"NHS ODS ORD API, active pharmacies in Wales (RO182), fetched {fetched_at}",
             "url": "https://directory.spineservices.nhs.uk/ORD/2-0-0/organisations",
             "sha256": hashlib.sha256(ods_path.read_bytes()).hexdigest(),
         }

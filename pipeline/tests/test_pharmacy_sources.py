@@ -45,10 +45,39 @@ def test_read_phs() -> None:
     assert pharmacies[1].postcode == "G1 2GF"
 
 
+def _summary(code: str, postcode: str) -> dict[str, str]:
+    return {
+        "OrgId": code,
+        "PostCode": postcode,
+        "Name": f"{code} PHARMACY",
+        "OrgLink": f"https://directory.spineservices.nhs.uk/ORD/2-0-0/organisations/{code}",
+    }
+
+
+def _detail(code: str, postcode: str, country: str) -> dict[str, Any]:
+    location = {
+        "AddrLn1": "1 HIGH STREET",
+        "Town": "TOWN",
+        "PostCode": postcode,
+        "Country": country,
+    }
+    return {"Organisation": {"Name": f"{code} PHARMACY", "GeoLoc": {"Location": location}}}
+
+
 class FakeFetcher:
     def __init__(self) -> None:
-        self.pages = [json.loads((FIXTURES / "ods_list.json").read_text()), {"Organisations": []}]
-        self.org = json.loads((FIXTURES / "ods_org_FWF56.json").read_text())
+        listing = json.loads((FIXTURES / "ods_list.json").read_text())["Organisations"]
+        listing += [
+            _summary("FWZ01", "LL99 9ZZ"),  # Welsh, postcode not (yet) in ONSPD
+            _summary("FHX01", "CH1 1AA"),  # English, in a Welsh-border area
+            _summary("FA0E2", "CH1 2AA"),
+        ]  # already in the NHSBSA list
+        self.pages = [{"Organisations": listing}, {"Organisations": []}]
+        self.details = {
+            "FWF56": json.loads((FIXTURES / "ods_org_FWF56.json").read_text()),
+            "FWZ01": _detail("FWZ01", "LL99 9ZZ", "WALES"),
+            "FHX01": _detail("FHX01", "CH1 1AA", "ENGLAND"),
+        }
         self.detail_calls: list[str] = []
 
     def get_json(self, url: str, params: dict[str, str] | None = None) -> Any:
@@ -59,8 +88,9 @@ class FakeFetcher:
             # Like the real ORD API: Offset is "records to skip" and 0 is rejected (406).
             assert params.get("Offset") != "0", "ORD rejects Offset=0"
             return self.pages[int(params.get("Offset", "0")) // 1000]
-        self.detail_calls.append(url)
-        return self.org
+        code = url.rsplit("/", 1)[-1]
+        self.detail_calls.append(code)
+        return self.details[code]
 
     def get_text(self, url: str) -> str:
         raise NotImplementedError
@@ -71,14 +101,25 @@ class FakeFetcher:
 
 def test_fetch_ods_wales() -> None:
     fetcher = FakeFetcher()
-    pharmacies = fetch_ods_wales(fetcher, welsh_postcodes={"LL11 4UF"}, pause_s=0)
-    assert len(pharmacies) == 1
+    pharmacies = fetch_ods_wales(
+        fetcher, welsh_areas={"LL", "CH"}, english_codes=frozenset({"FA0E2"}), pause_s=0
+    )
+    assert [p.code for p in pharmacies] == ["FWF56", "FWZ01"]
     wales = pharmacies[0]
-    assert (wales.nation, wales.code, wales.name) == ("Wales", "FWF56", "ROWLANDS PHARMACY")
+    assert (wales.nation, wales.name) == ("Wales", "ROWLANDS PHARMACY")
     assert wales.address == ("PEN Y MAES HEALTH CENTRE", "BEECH STREET", "SUMMERHILL", "WREXHAM")
     assert wales.postcode == "LL11 4UF"
     assert wales.hours is None
-    assert len(fetcher.detail_calls) == 1  # the English org is never looked up
+    # The postcode is kept even though ONSPD doesn't know it, so geocoding can count the failure.
+    assert pharmacies[1].postcode == "LL99 9ZZ"
+    # FA002 (SK area) and FA0E2 (already English) are never looked up.
+    assert sorted(fetcher.detail_calls) == ["FHX01", "FWF56", "FWZ01"]
+
+
+def test_postcode_area() -> None:
+    from within_reach_pipeline.pharmacies.wales import postcode_area
+
+    assert [postcode_area(p) for p in ["LL11 4UF", "CH5 1AA", "M1 1AE"]] == ["LL", "CH", "M"]
 
 
 def test_read_nhsbsa_missing_hours_column_raises(tmp_path: Path) -> None:

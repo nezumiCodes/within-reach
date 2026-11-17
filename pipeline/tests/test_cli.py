@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from fakes import FakeFetcher, onspd_zip_bytes
+from fakes import FIXTURES, FakeFetcher, onspd_zip_bytes
 
 from within_reach_pipeline import cli
 from within_reach_pipeline.pharmacies.wales import load_ods_wales
@@ -11,7 +11,7 @@ def test_cli_fetch_writes_cache(tmp_path: Path) -> None:
     fetcher = FakeFetcher(
         downloads={
             "arcgis.com/sharing/rest/content/items": onspd_zip_bytes(tmp_path),
-            "consol_pharmacy_list": b"nhsbsa",
+            "consol_pharmacy_list": (FIXTURES / "nhsbsa_sample.csv").read_bytes(),
             "contractor_details": b"contractor",
             "dispenser_contactdetails": b"phs",
             "geofabrik": b"pbf",
@@ -30,10 +30,10 @@ def test_cli_fetch_writes_cache(tmp_path: Path) -> None:
     assert len(list((cache / "onspd" / "Documents").glob("*.csv"))) == 3
     assert not (cache / "onspd" / "User Guide").exists()
 
-    # Only LL11 1AA is Welsh in the ONSPD fixture, and the ODS fixture's Welsh pharmacy is in
-    # LL11 4UF, so the ODS list must be matched against Welsh postcodes from ONSPD.
+    # LL11 1AA makes "LL" a Welsh postcode area, so FWF56 (LL11 4UF) is looked up in ODS and
+    # kept because its ODS record says WALES. FA002 (SK7) is never considered.
     welsh = load_ods_wales(cache / "ods_wales.json")
-    assert welsh == []
+    assert [p.code for p in welsh] == ["FWF56"]
 
 
 def test_ods_wales_roundtrip(tmp_path: Path) -> None:
