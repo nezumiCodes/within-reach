@@ -36,10 +36,13 @@ class HttpxFetcher:
         self._retries = retries
         self._backoff_s = backoff_s
 
-    def _get(self, url: str, params: dict[str, str] | None = None) -> httpx.Response:
+    def _get(
+        self, url: str, params: dict[str, str] | None = None, accept: str | None = None
+    ) -> httpx.Response:
+        headers = {"Accept": accept} if accept else None
         for attempt in range(1, self._retries + 1):
             try:
-                response = self._client.get(url, params=params)
+                response = self._client.get(url, params=params, headers=headers)
                 if response.status_code < 500:
                     response.raise_for_status()
                     return response
@@ -52,7 +55,8 @@ class HttpxFetcher:
         raise RuntimeError("unreachable")
 
     def get_json(self, url: str, params: dict[str, str] | None = None) -> Any:
-        return self._get(url, params).json()
+        # Some APIs (NHS ODS) answer 406 unless JSON is requested explicitly.
+        return self._get(url, params, accept="application/json").json()
 
     def get_text(self, url: str) -> str:
         return self._get(url).text

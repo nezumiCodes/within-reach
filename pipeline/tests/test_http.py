@@ -41,3 +41,14 @@ def test_get_json_retries_on_server_error() -> None:
     fetcher = HttpxFetcher(UA, transport=httpx.MockTransport(handler), backoff_s=0)
     assert fetcher.get_json("https://example.test/api") == [1]
     assert calls["n"] == 3
+
+
+def test_get_json_asks_for_json() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["accept"] = request.headers.get("Accept", "")
+        return httpx.Response(200, json={})
+
+    HttpxFetcher(UA, transport=httpx.MockTransport(handler)).get_json("https://example.test")
+    assert seen["accept"] == "application/json"
