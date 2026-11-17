@@ -4,6 +4,10 @@ name: Pipeline
 # fetch -> build area shards in parallel -> merge -> release checks -> GitHub Release data-YYYY-MM.
 # Nothing is published unless every check passes (AC-14); a failure opens an alert issue.
 on:
+  # TEMPORARY: test runs from the branch before pipeline.yml is on main. Remove before merging.
+  push:
+    branches: [phase-1-pipeline-v1]
+    paths: ['.github/workflows/pipeline.yml']
   schedule:
     - cron: '0 3 2 * *' # 03:00 UTC on the 2nd of each month
   workflow_dispatch:
