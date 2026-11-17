@@ -34,7 +34,9 @@ app/node_modules/.tmp/
 *.xlsm
 *.ods
 !fixtures/synthetic/**
+!pipeline/tests/fixtures/**
 
 # Pipeline outputs (published to the host, not the repo)
 pipeline/data/
 pipeline/build/
+pipeline/.cache/

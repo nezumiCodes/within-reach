@@ -55,3 +55,15 @@ def test_xlsx_outside_synthetic_blocked(tmp_path: Path) -> None:
 def test_other_files_ignored(tmp_path: Path) -> None:
     path, rel = _write(tmp_path, "README.md", "9434765919")
     assert ccd.problems_for(path, rel) == []
+
+
+def test_pipeline_public_fixtures_allowed(tmp_path: Path) -> None:
+    path, rel = _write(
+        tmp_path, "pipeline/tests/fixtures/phs_sample.csv", "DispCode,DispLocationName\n1030,X\n"
+    )
+    assert ccd.problems_for(path, rel) == []
+
+
+def test_pipeline_fixtures_still_scanned(tmp_path: Path) -> None:
+    path, rel = _write(tmp_path, "pipeline/tests/fixtures/bad.csv", "client_ref,name\nAB1,x\n")
+    assert ccd.problems_for(path, rel)
