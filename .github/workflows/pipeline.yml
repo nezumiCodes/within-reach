@@ -1,0 +1,200 @@
+name: Pipeline
+
+# Monthly data build (spec FR-01 to FR-05). Public data only.
+# fetch -> build area shards in parallel -> merge -> release checks -> GitHub Release data-YYYY-MM.
+# Nothing is published unless every check passes (AC-14); a failure opens an alert issue.
+on:
+  schedule:
+    - cron: '0 3 2 * *' # 03:00 UTC on the 2nd of each month
+  workflow_dispatch:
+    inputs:
+      areas:
+        description: 'Area codes, space-separated (empty = all; private repo = reference areas)'
+        required: false
+        default: ''
+      release:
+        description: 'Release name YYYY-MM (empty = current month)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+env:
+  # While the repository is private, Actions storage is limited (500 MB), so scheduled runs
+  # build only the reference areas. Once public, an empty value builds all of Great Britain.
+  REFERENCE_AREAS: 'E06000050 W11000023'
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      shards: ${{ steps.shards.outputs.shards }}
+      release: ${{ steps.release.outputs.release }}
+    defaults:
+      run:
+        working-directory: pipeline
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: uv sync --locked
+      - id: release
+        env:
+          INPUT_RELEASE: ${{ inputs.release }}
+        run: |
+          release="${INPUT_RELEASE:-$(date -u +%Y-%m)}"
+          [[ "$release" =~ ^[0-9]{4}-[0-9]{2}$ ]] || { echo "bad release name"; exit 1; }
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+      - name: Fetch public data
+        run: uv run within-reach-pipeline fetch --cache .cache
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: pipeline/.cache
+          key: pipeline-cache-${{ github.run_id }}
+      - id: shards
+        env:
+          INPUT_AREAS: ${{ inputs.areas }}
+          PRIVATE_REPO: ${{ github.event.repository.private }}
+        run: |
+          areas="$INPUT_AREAS"
+          if [ -z "$areas" ] && [ "$PRIVATE_REPO" = "true" ]; then areas="$REFERENCE_AREAS"; fi
+          if [ -n "$areas" ]; then
+            # shellcheck disable=SC2086
+            shards=$(uv run within-reach-pipeline areas --cache .cache --only $areas)
+          else
+            shards=$(uv run within-reach-pipeline areas --cache .cache --shard-size 10)
+          fi
+          echo "shards=$shards" >> "$GITHUB_OUTPUT"
+          echo "$shards"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: true
+      max-parallel: 8
+      matrix:
+        areas: ${{ fromJSON(needs.prepare.outputs.shards) }}
+    defaults:
+      run:
+        working-directory: pipeline
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: uv sync --locked
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends osmium-tool
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: pipeline/.cache
+          key: pipeline-cache-${{ github.run_id }}
+          fail-on-cache-miss: true
+      - name: Build areas
+        env:
+          AREAS: ${{ matrix.areas }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
+        run: |
+          # shellcheck disable=SC2086
+          uv run within-reach-pipeline build --cache .cache --release "$RELEASE" \
+            --out shard --areas $AREAS --router osrm
+      - id: name
+        env:
+          AREAS: ${{ matrix.areas }}
+        run: echo "name=shard-$(echo "$AREAS" | tr ' ' '-')" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.name.outputs.name }}
+          path: pipeline/shard/
+          retention-days: 1
+
+  assemble:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write # create the release and record it in data/RELEASES.md
+    env:
+      RELEASE: ${{ needs.prepare.outputs.release }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        working-directory: pipeline
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: uv sync --locked
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: pipeline/.cache
+          key: pipeline-cache-${{ github.run_id }}
+          fail-on-cache-miss: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: shard-*
+          path: pipeline/shards
+      - name: Merge shards
+        run: |
+          uv run within-reach-pipeline build --cache .cache --release "$RELEASE" \
+            --out "release/$RELEASE" --areas
+          uv run within-reach-pipeline merge --out "release/$RELEASE" shards/*
+      - name: Previous release
+        id: previous
+        run: |
+          previous=$(gh release list --limit 50 --json tagName \
+            --jq '[.[].tagName | select(startswith("data-"))] | sort | last // ""')
+          if [ -n "$previous" ]; then
+            gh release download "$previous" --pattern '*.tar.gz' --dir previous
+            tar -xzf previous/*.tar.gz -C previous
+            echo "dir=previous/${previous#data-}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Release checks (FR-04)
+        env:
+          PREVIOUS_DIR: ${{ steps.previous.outputs.dir }}
+        run: |
+          args=(--release-dir "release/$RELEASE")
+          [ -n "$PREVIOUS_DIR" ] && args+=(--previous-dir "$PREVIOUS_DIR")
+          [ -f reference/expectations.toml ] && args+=(--reference reference/expectations.toml)
+          uv run within-reach-pipeline check "${args[@]}"
+      - name: Publish release
+        run: |
+          tar -czf "data-$RELEASE.tar.gz" -C release "$RELEASE"
+          sha256sum "data-$RELEASE.tar.gz" > "data-$RELEASE.tar.gz.sha256"
+          gh release create "data-$RELEASE" "data-$RELEASE.tar.gz" "data-$RELEASE.tar.gz.sha256" \
+            --title "Data release $RELEASE" \
+            --notes "Automated data release. See manifest.json inside for sources and checksums."
+      - name: Record release (keeps the monthly schedule active)
+        working-directory: .
+        run: |
+          mkdir -p data
+          [ -f data/RELEASES.md ] || printf '# Data releases\n\n' > data/RELEASES.md
+          echo "- data-$RELEASE published $(date -u +%Y-%m-%dT%H:%MZ)" >> data/RELEASES.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/RELEASES.md
+          git commit -m "data: record release data-$RELEASE"
+          git push
+
+  alert:
+    needs: [prepare, build, assemble]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open an alert issue (FR-04)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Data pipeline failed ($(date -u +%Y-%m-%d))" \
+            --body "The monthly data pipeline failed, so nothing was published and the previous release stays live. Run: $RUN_URL"
