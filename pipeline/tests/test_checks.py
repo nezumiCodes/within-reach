@@ -1,5 +1,6 @@
 import dataclasses
 import gzip
+import hashlib
 import json
 from pathlib import Path
 
@@ -137,10 +138,44 @@ def test_reference_passes_and_fails(tmp_path: Path) -> None:
     release = _release(tmp_path)
     good = _reference(tmp_path, '"England:FA001", "England:FA002"', "[600, 900]")
     assert run_checks(release, CONFIG, None, good) == []
-    bad = _reference(tmp_path, '"England:FA002", "England:FA001"', "[600, 900]")
+    bad = _reference(tmp_path, '"England:FA001", "Wales:FW002"', "[600, 900]")
     assert _only(run_checks(release, CONFIG, None, bad)) == "reference"
     far = _reference(tmp_path, '"England:FA001"', "[1, 2]")
     assert _only(run_checks(release, CONFIG, None, far)) == "reference"
+
+
+def test_reference_ignores_order_within_the_nearest(tmp_path: Path) -> None:
+    # Near-ties (tens of metres) swap places when OSM paths change; the set is what matters.
+    release = _release(tmp_path)
+    swapped = _reference(tmp_path, '"England:FA002", "England:FA001"', "[600, 900]")
+    assert run_checks(release, CONFIG, None, swapped) == []
+
+
+def _set_walk(release: Path, row_prefix: str, walk_m: int) -> None:
+    """Change one travel row's walking distance and keep the manifest checksums valid."""
+    path = release / "areas" / "E06000050" / "travel.csv.gz"
+    lines = gzip.decompress(path.read_bytes()).decode().splitlines(keepends=True)
+    for i, line in enumerate(lines):
+        if line.startswith(row_prefix):
+            cells = line.split(",")
+            cells[3] = str(walk_m)
+            lines[i] = ",".join(cells)
+    data = gzip.compress("".join(lines).encode(), mtime=0)
+    path.write_bytes(data)
+    manifest = _manifest(release)
+    entry = manifest["areas"][0]["files"]["travel"]
+    entry["sha256"], entry["bytes"] = hashlib.sha256(data).hexdigest(), len(data)
+    _save(release, manifest)
+
+
+def test_reference_ranks_by_walking_distance(tmp_path: Path) -> None:
+    # The travel file is in straight-line order; "nearest" means nearest on foot.
+    release = _release(tmp_path)
+    _set_walk(release, "0,0,", 99_999)  # CH1 1AA -> FA001 is closest in a line, far on foot
+    walking = _reference(tmp_path, '"England:FA002", "Wales:FW002"', "[2400, 2600]")
+    assert run_checks(release, CONFIG, None, walking) == []
+    straight = _reference(tmp_path, '"England:FA001", "England:FA002"', "[600, 900]")
+    assert _only(run_checks(release, CONFIG, None, straight)) == "reference"
 
 
 def test_cli_check_exit_codes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

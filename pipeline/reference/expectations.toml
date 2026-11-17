@@ -1,0 +1,63 @@
+# Hand-checked reference postcodes (Task 10). See README.md in this folder.
+# nearest: the 3 nearest pharmacies on foot, in any order. walk_m_range: the
+# shortest walk, +/-15% of the November 2026 value.
+
+[[case]]
+# Chester centre: Superdrug Pharmacy CH1 2HA 70 m; Boots CH1 1NA 362 m; Tesco Instore Pharmacy CH1 3JS 453 m
+postcode = "CH1 2SA"
+nearest = ["England:FY420", "England:FT378", "England:FXP75"]
+walk_m_range = [60, 80]
+
+[[case]]
+# Hoole: Boughton Pharmacy CH2 3DP 816 m; Swettenhams Chemists CH2 2LJ 1331 m; Tesco Instore Pharmacy CH1 3JS 1673 m
+postcode = "CH2 3JQ"
+nearest = ["England:FFY48", "England:FPP41", "England:FXP75"]
+walk_m_range = [694, 938]
+
+[[case]]
+# Upton: Well CH2 1HD 274 m; Morrisons Pharmacy CH2 1BT 641 m; Swettenhams Chemists CH2 2LJ 1781 m
+postcode = "CH2 1HU"
+nearest = ["England:FTT01", "England:FWN30", "England:FPP41"]
+walk_m_range = [233, 315]
+
+[[case]]
+# Blacon: Swettenham Chemists CH1 5HN 505 m; Garrett Pharmacy CH1 5PN 997 m; Boots CH1 4QG 2221 m
+postcode = "CH1 5EQ"
+nearest = ["England:FK874", "England:FFF88", "England:FX525"]
+walk_m_range = [429, 581]
+
+[[case]]
+# Saltney (England side): Owen'S Chemist CH4 8BJ 1394 m; Morrisons Pharmacy CH4 8RU 1413 m; Westminster Park Pharmacy CH4 7QD 2381 m
+postcode = "CH4 8PU"
+nearest = ["England:FLM30", "Wales:FWD79", "England:FLL40"]
+walk_m_range = [1185, 1603]
+
+[[case]]
+# Broughton (Wales side): Broughton Village Pharmacy CH4 0NR 843 m; Boots CH4 0DP 1008 m; Morrisons Pharmacy CH4 8RU 3802 m
+postcode = "CH4 0QN"
+nearest = ["Wales:FWV56", "Wales:FWR58", "Wales:FWD79"]
+walk_m_range = [717, 969]
+
+[[case]]
+# Wrexham centre: Superdrug Pharmacy LL11 1SA 235 m; Rowlands Pharmacy LL13 8DB 384 m; Rowlands Pharmacy LL13 7DD 421 m
+postcode = "LL11 1AL"
+nearest = ["Wales:FWF94", "Wales:FWF80", "Wales:FWF73"]
+walk_m_range = [200, 270]
+
+[[case]]
+# Wrexham Rhosddu: Superdrug Pharmacy LL11 1SA 1086 m; Rowlands Pharmacy LL11 2NS 1135 m; Rowlands Pharmacy LL11 2SA 1493 m
+postcode = "LL11 2AW"
+nearest = ["Wales:FWF94", "Wales:FWF64", "Wales:FWF59"]
+walk_m_range = [923, 1249]
+
+[[case]]
+# Malpas (rural England): Well SY14 8NU 130 m; Rowlands Pharmacy SY13 1AX 8358 m; Boots SY13 1DW 8454 m
+postcode = "SY14 8PB"
+nearest = ["England:FF812", "England:FLA00", "England:FVN98"]
+walk_m_range = [110, 150]
+
+[[case]]
+# Corwen (rural Wales): Rowlands Pharmacy LL21 0DE 271 m; Well Street Pharmacy LL15 1AW 18069 m; Boots LL15 1DP 18326 m
+postcode = "LL21 0BB"
+nearest = ["Wales:FWP35", "Wales:FWV26", "Wales:FWR51"]
+walk_m_range = [230, 312]

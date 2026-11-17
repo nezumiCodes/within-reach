@@ -168,9 +168,13 @@ def _check_reference(
         if travel is None:
             failures.append(CheckFailure("reference", f"{postcode}: not in any built area"))
             continue
+        # Travel rows are stored in straight-line order; the reference is about walking.
+        # Rows without a walking route sort last. Order within the top N is not compared,
+        # because near-ties (tens of metres) swap places as OSM paths are edited.
+        travel.sort(key=lambda r: (not r["walk_m"], int(r["walk_m"] or 0), int(r["straight_m"])))
         expected = list(case["nearest"])
         actual = [directory[r["ph_idx"]] for r in travel[: len(expected)]]
-        if actual != expected:
+        if sorted(actual) != sorted(expected):
             failures.append(
                 CheckFailure("reference", f"{postcode}: nearest {actual} != {expected}")
             )
