@@ -9,6 +9,10 @@ min_candidates = 5      # ...and always at least the nearest 5, however far
 max_file_bytes = 25_165_824   # 24 MiB: headroom under Cloudflare Pages' 25 MiB per-file limit
 count_tolerance = 0.10        # counts per nation must be within ±10% of the previous release
 geocode_failure_limit = 0.01  # at most 1% of a nation's pharmacies may fail to geocode
+# Online-only pharmacies excluded (471 matched in October 2026). Outside this range, the
+# NHSBSA Contractor Details format has probably changed.
+distance_selling_min = 200
+distance_selling_max = 1000
 
 [routing]
 osrm_image = "ghcr.io/project-osrm/osrm-backend:v26.11.0-debian"

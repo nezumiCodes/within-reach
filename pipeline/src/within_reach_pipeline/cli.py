@@ -133,6 +133,11 @@ def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
     merge_cmd.add_argument("--out", type=Path, required=True)
     merge_cmd.add_argument("shards", type=Path, nargs="+")
 
+    check_cmd = commands.add_parser("check", help="run the release checks (FR-04)")
+    check_cmd.add_argument("--release-dir", type=Path, required=True)
+    check_cmd.add_argument("--previous-dir", type=Path, default=None)
+    check_cmd.add_argument("--reference", type=Path, default=None)
+
     args = parser.parse_args(list(argv))
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
@@ -147,4 +152,13 @@ def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
         )
     elif args.command == "merge":
         merge(args.out, args.shards)
+    elif args.command == "check":
+        from within_reach_pipeline.checks import run_checks
+
+        failures = run_checks(args.release_dir, load_config(), args.previous_dir, args.reference)
+        for failure in failures:
+            log.error("CHECK FAILED [%s] %s", failure.check, failure.detail)
+        if failures:
+            return 1
+        log.info("all release checks passed")
     return 0

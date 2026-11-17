@@ -118,6 +118,28 @@ CACHE_POSTCODES = [
         -3.0151,
     ),
     (
+        "G22 5ER",
+        "S92000003",
+        "S99999999",
+        "S12000049",
+        "S08000031",
+        259000,
+        668000,
+        55.8800,
+        -4.2400,
+    ),
+    (
+        "G1 2GF",
+        "S92000003",
+        "S99999999",
+        "S12000049",
+        "S08000031",
+        259500,
+        665500,
+        55.8620,
+        -4.2520,
+    ),
+    (
         "LL12 7AA",
         "W92000004",
         "W99999999",
@@ -132,7 +154,7 @@ CACHE_POSTCODES = [
 
 
 def make_cache(root: Path) -> Path:
-    """A complete fetch cache in miniature: 6 postcodes in 2 areas, 4 usable pharmacies."""
+    """A complete fetch cache in miniature: 8 postcodes in 3 areas, 6 usable pharmacies."""
     import csv
 
     cache = root / "cache"
@@ -171,7 +193,7 @@ def make_cache(root: Path) -> Path:
     (cache / "contractor_details.csv").write_bytes(
         (FIXTURES / "contractor_details_sample.csv").read_bytes()
     )  # FAA01 is flagged as distance selling
-    (cache / "phs.csv").write_bytes((FIXTURES / "phs_sample.csv").read_bytes())  # no GB match
+    (cache / "phs.csv").write_bytes((FIXTURES / "phs_sample.csv").read_bytes())
     (cache / "ods_wales.json").write_text(
         json.dumps(
             [

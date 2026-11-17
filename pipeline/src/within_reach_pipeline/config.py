@@ -17,6 +17,8 @@ class PipelineConfig:
     geocode_failure_limit: float
     osrm_image: str
     user_agent: str
+    distance_selling_min: int
+    distance_selling_max: int
 
 
 def load_config(path: Path = DEFAULT_CONFIG) -> PipelineConfig:
@@ -31,4 +33,6 @@ def load_config(path: Path = DEFAULT_CONFIG) -> PipelineConfig:
         geocode_failure_limit=float(release["geocode_failure_limit"]),
         osrm_image=str(data["routing"]["osrm_image"]),
         user_agent=str(data["http"]["user_agent"]),
+        distance_selling_min=int(release["distance_selling_min"]),
+        distance_selling_max=int(release["distance_selling_max"]),
     )
