@@ -34,6 +34,10 @@ def area_bbox(points: Iterable[LatLon], margin_m: int = 3000) -> BBox:
     )
 
 
+OSMIUM_IMAGE = "within-reach-osmium:1"
+OSMIUM_DOCKERFILE = Path(__file__).resolve().parents[3] / "docker" / "osmium.Dockerfile"
+
+
 def osmium_extract_command(src_pbf: Path, bbox: BBox, dest: Path) -> list[str]:
     box = ",".join(str(v) for v in bbox)
     return [
@@ -50,9 +54,43 @@ def osmium_extract_command(src_pbf: Path, bbox: BBox, dest: Path) -> list[str]:
     ]
 
 
+def osmium_command(src_pbf: Path, bbox: BBox, dest: Path, native: bool) -> list[str]:
+    """Run osmium directly if installed, otherwise in the local Docker image."""
+    command = osmium_extract_command(src_pbf, bbox, dest)
+    if native:
+        return command
+    mounts = ["-v", f"{src_pbf.parent}:{src_pbf.parent}:ro", "-v", f"{dest.parent}:{dest.parent}"]
+    return ["docker", "run", "--rm", *mounts, OSMIUM_IMAGE, *command]
+
+
+def _ensure_osmium_image() -> None:
+    present = subprocess.run(  # noqa: S603
+        ["docker", "image", "inspect", OSMIUM_IMAGE],  # noqa: S607
+        capture_output=True,
+        check=False,
+    )
+    if present.returncode != 0:
+        log.info("building %s", OSMIUM_IMAGE)
+        _run(
+            [
+                "docker",
+                "build",
+                "-t",
+                OSMIUM_IMAGE,
+                "-f",
+                str(OSMIUM_DOCKERFILE),
+                str(OSMIUM_DOCKERFILE.parent),
+            ]
+        )
+
+
 def clip_extract(src_pbf: Path, bbox: BBox, dest: Path) -> Path:
+    src_pbf, dest = src_pbf.resolve(), dest.resolve()
     dest.parent.mkdir(parents=True, exist_ok=True)
-    _run(osmium_extract_command(src_pbf, bbox, dest))
+    native = shutil.which("osmium") is not None
+    if not native:
+        _ensure_osmium_image()
+    _run(osmium_command(src_pbf, bbox, dest, native))
     return dest
 
 

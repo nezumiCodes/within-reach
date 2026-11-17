@@ -74,3 +74,40 @@ def test_osmium_extract_command() -> None:
         "/out/area.osm.pbf",
         "--overwrite",
     ]
+
+
+def test_osmium_runs_in_docker_when_not_installed() -> None:
+    from within_reach_pipeline.routing.osrm import OSMIUM_IMAGE, osmium_command
+
+    cmd = osmium_command(
+        Path("/in/uk.osm.pbf"), (-3.1, 52.9, -2.7, 53.3), Path("/out/area.osm.pbf"), native=False
+    )
+    assert cmd == [
+        "docker",
+        "run",
+        "--rm",
+        "-v",
+        "/in:/in:ro",
+        "-v",
+        "/out:/out",
+        OSMIUM_IMAGE,
+        "osmium",
+        "extract",
+        "--strategy",
+        "smart",
+        "-b",
+        "-3.1,52.9,-2.7,53.3",
+        "/in/uk.osm.pbf",
+        "-o",
+        "/out/area.osm.pbf",
+        "--overwrite",
+    ]
+
+
+def test_osmium_native_when_installed() -> None:
+    from within_reach_pipeline.routing.osrm import osmium_command
+
+    cmd = osmium_command(
+        Path("/in/uk.osm.pbf"), (0.0, 1.0, 2.0, 3.0), Path("/o/a.pbf"), native=True
+    )
+    assert cmd[0] == "osmium"
