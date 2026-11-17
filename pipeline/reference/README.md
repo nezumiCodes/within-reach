@@ -9,7 +9,7 @@ For each postcode:
 
 ## How they were checked
 
-The November 2026 results were checked by hand on 17 November 2026 using walking directions on openstreetmap.org, and on Google Maps for CH4 0QN, which OpenStreetMap's search doesn't find. The results matched, apart from the order of these near-ties:
+The November 2026 results were checked by hand on 17 November 2026 using walking directions on openstreetmap.org, and on Google Maps for CH4 0QN, which OpenStreetMap's search doesn't find. The nearest pharmacy on foot matched for every postcode, including these near-ties:
 
 - CH4 8PU (Saltney): Owen's CH4 8BJ (1,394 m) and Morrisons CH4 8RU across the border (1,413 m).
 - LL11 2AW (Rhosddu): Superdrug LL11 1SA (1,086 m) and Rowlands LL11 2NS (1,135 m).
