@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from within_reach_pipeline.pharmacies.england import read_distance_selling_codes, read_nhsbsa
 from within_reach_pipeline.pharmacies.scotland import read_phs
 from within_reach_pipeline.pharmacies.wales import fetch_ods_wales
@@ -77,3 +79,20 @@ def test_fetch_ods_wales() -> None:
     assert wales.postcode == "LL11 4UF"
     assert wales.hours is None
     assert len(fetcher.detail_calls) == 1  # the English org is never looked up
+
+
+def test_read_nhsbsa_missing_hours_column_raises(tmp_path: Path) -> None:
+    text = (FIXTURES / "nhsbsa_sample.csv").read_text(encoding="utf-8-sig")
+    renamed = tmp_path / "renamed.csv"
+    renamed.write_text(text.replace("PHARMACY_OPENING_HOURS_MONDAY", "OPENING_MONDAY", 1))
+    with pytest.raises(ValueError, match="PHARMACY_OPENING_HOURS_MONDAY"):
+        read_nhsbsa(renamed)
+
+
+def test_read_nhsbsa_short_row_does_not_crash(tmp_path: Path) -> None:
+    lines = (FIXTURES / "nhsbsa_sample.csv").read_text(encoding="utf-8-sig").splitlines()
+    short = tmp_path / "short.csv"
+    short.write_text("\n".join([lines[0], "FZZ01,STOCKPORT,SHORT PHARMACY,ORG,1 HIGH ST"]) + "\n")
+    pharmacies, _ = read_nhsbsa(short)
+    assert pharmacies[0].code == "FZZ01"
+    assert pharmacies[0].hours is not None and pharmacies[0].hours["mon"] is None

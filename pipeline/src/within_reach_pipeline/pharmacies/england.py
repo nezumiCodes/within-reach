@@ -1,6 +1,7 @@
 """England: NHSBSA Consolidated Pharmaceutical List and Contractor Details (both OGL)."""
 
 import csv
+from collections.abc import Sequence
 from pathlib import Path
 
 from within_reach_pipeline.models import WEEKDAYS, OpeningHours, RawPharmacy
@@ -18,32 +19,50 @@ _DAY_COLUMNS = {
 }
 # Dispensing appliance contractors supply appliances only; they are not pharmacies.
 _EXCLUDED_CONTRACTS = {"DAC"}
+_REQUIRED = [
+    "PHARMACY_ODS_CODE_F_CODE",
+    "PHARMACY_TRADING_NAME",
+    "POST_CODE",
+    "CONTRACT_TYPE",
+    *_DAY_COLUMNS.values(),
+]
+
+
+def _require(fieldnames: Sequence[str] | None, required: list[str], source: str) -> None:
+    missing = [c for c in required if c not in (fieldnames or [])]
+    if missing:
+        raise ValueError(f"{source} is missing columns: {', '.join(missing)}")
+
+
+def _cell(row: dict[str, str | None], key: str) -> str:
+    return (row.get(key) or "").strip()
 
 
 def read_nhsbsa(csv_path: Path) -> tuple[list[RawPharmacy], int]:
     pharmacies: list[RawPharmacy] = []
     warnings = 0
     with csv_path.open(encoding="utf-8-sig", newline="") as handle:
-        for row in csv.DictReader(handle):
-            if row["CONTRACT_TYPE"].strip().upper() in _EXCLUDED_CONTRACTS:
+        reader = csv.DictReader(handle)
+        _require(reader.fieldnames, _REQUIRED, "NHSBSA pharmacy list")
+        for row in reader:
+            if _cell(row, "CONTRACT_TYPE").upper() in _EXCLUDED_CONTRACTS:
                 continue
             hours: OpeningHours = {}
             for day in WEEKDAYS:
-                raw_value = row.get(_DAY_COLUMNS[day], "")
+                raw_value = _cell(row, _DAY_COLUMNS[day])
                 parsed = parse_day_hours(raw_value)
-                if parsed is None and raw_value.strip():
+                if parsed is None and raw_value:
                     warnings += 1
                 hours[day] = parsed
-            address = tuple(
-                part for i in range(1, 5) if (part := row.get(f"ADDRESS_FIELD_{i}", "").strip())
-            )
+            address = tuple(part for i in range(1, 5) if (part := _cell(row, f"ADDRESS_FIELD_{i}")))
+            postcode = _cell(row, "POST_CODE")
             pharmacies.append(
                 RawPharmacy(
                     nation="England",
-                    code=row["PHARMACY_ODS_CODE_F_CODE"].strip(),
-                    name=row["PHARMACY_TRADING_NAME"].strip(),
+                    code=_cell(row, "PHARMACY_ODS_CODE_F_CODE"),
+                    name=_cell(row, "PHARMACY_TRADING_NAME"),
                     address=address,
-                    postcode=normalise_postcode(row["POST_CODE"]) or row["POST_CODE"].strip(),
+                    postcode=normalise_postcode(postcode) or postcode,
                     hours=hours,
                 )
             )
@@ -53,8 +72,14 @@ def read_nhsbsa(csv_path: Path) -> tuple[list[RawPharmacy], int]:
 def read_distance_selling_codes(csv_path: Path) -> frozenset[str]:
     """Codes of online-only (distance-selling) pharmacies, which can't supervise doses."""
     with csv_path.open(encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        _require(
+            reader.fieldnames,
+            ["CONTRACTOR_CODE", "DISTANCE_SELLING_CONTRACTOR"],
+            "NHSBSA Contractor Details",
+        )
         return frozenset(
-            row["CONTRACTOR_CODE"].strip()
-            for row in csv.DictReader(handle)
-            if row.get("DISTANCE_SELLING_CONTRACTOR", "").strip().upper() == "Y"
+            _cell(row, "CONTRACTOR_CODE")
+            for row in reader
+            if _cell(row, "DISTANCE_SELLING_CONTRACTOR").upper() == "Y"
         )
