@@ -56,3 +56,144 @@ class FakeFetcher:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(body)
         return hashlib.sha256(body).hexdigest()
+
+
+ONSPD_HEADER = (FIXTURES / "onspd_sample.csv").read_text(encoding="utf-8").splitlines()[0]
+
+# postcode, ctry, cty, lad, hlth, east, north, lat, lon
+CACHE_POSTCODES = [
+    (
+        "CH1 1AA",
+        "E92000001",
+        "E99999999",
+        "E06000050",
+        "E18000008",
+        340500,
+        366300,
+        53.1900,
+        -2.8900,
+    ),
+    (
+        "CH1 2AA",
+        "E92000001",
+        "E99999999",
+        "E06000050",
+        "E18000008",
+        341000,
+        366500,
+        53.1918,
+        -2.8826,
+    ),
+    (
+        "CH2 1AA",
+        "E92000001",
+        "E99999999",
+        "E06000050",
+        "E18000008",
+        342000,
+        367500,
+        53.2009,
+        -2.8678,
+    ),
+    (
+        "LL11 1AA",
+        "W92000004",
+        "W99999999",
+        "W06000006",
+        "W11000023",
+        333000,
+        350500,
+        53.0470,
+        -3.0000,
+    ),
+    (
+        "LL11 4UF",
+        "W92000004",
+        "W99999999",
+        "W06000006",
+        "W11000023",
+        332000,
+        351500,
+        53.0559,
+        -3.0151,
+    ),
+    (
+        "LL12 7AA",
+        "W92000004",
+        "W99999999",
+        "W06000006",
+        "W11000023",
+        334500,
+        352000,
+        53.0606,
+        -2.9779,
+    ),
+]
+
+
+def make_cache(root: Path) -> Path:
+    """A complete fetch cache in miniature: 6 postcodes in 2 areas, 4 usable pharmacies."""
+    import csv
+
+    cache = root / "cache"
+    data = cache / "onspd" / "Data"
+    data.mkdir(parents=True)
+    header = ONSPD_HEADER.split(",")
+    with (data / "ONSPD_TEST_2026_UK.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=header)
+        writer.writeheader()
+        for pc, ctry, cty, lad, hlth, east, north, lat, lon in CACHE_POSTCODES:
+            row = dict.fromkeys(header, "")
+            row.update(
+                pcds=pc,
+                ctry26cd=ctry,
+                cty26cd=cty,
+                lad26cd=lad,
+                hlth19cd=hlth,
+                east1m=str(east),
+                north1m=str(north),
+                lat=f"{lat:.6f}",
+                long=f"{lon:.6f}",
+            )
+            writer.writerow(row)
+    docs = cache / "onspd" / "Documents"
+    docs.mkdir()
+    for names in (FIXTURES / "onspd_names").glob("*.csv"):
+        (docs / names.name).write_bytes(names.read_bytes())
+
+    nhsbsa_rows = list(csv.DictReader((FIXTURES / "nhsbsa_sample.csv").open(encoding="utf-8-sig")))
+    template = next(r for r in nhsbsa_rows if r["PHARMACY_ODS_CODE_F_CODE"] == "FA002")
+    with (cache / "nhsbsa.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(template))
+        writer.writeheader()
+        for code, postcode in [("FA001", "CH1 2AA"), ("FA002", "CH2 1AA"), ("FAA01", "CH1 1AA")]:
+            writer.writerow({**template, "PHARMACY_ODS_CODE_F_CODE": code, "POST_CODE": postcode})
+    (cache / "contractor_details.csv").write_bytes(
+        (FIXTURES / "contractor_details_sample.csv").read_bytes()
+    )  # FAA01 is flagged as distance selling
+    (cache / "phs.csv").write_bytes((FIXTURES / "phs_sample.csv").read_bytes())  # no GB match
+    (cache / "ods_wales.json").write_text(
+        json.dumps(
+            [
+                {
+                    "code": "FWF56",
+                    "name": "ROWLANDS PHARMACY",
+                    "address": ["BEECH STREET", "WREXHAM"],
+                    "postcode": "LL11 4UF",
+                },
+                {
+                    "code": "FW002",
+                    "name": "WREXHAM PHARMACY",
+                    "address": ["HIGH STREET", "WREXHAM"],
+                    "postcode": "LL12 7AA",
+                },
+            ]
+        )
+    )
+    (cache / "uk.osm.pbf").write_bytes(b"not used by the fake router")
+    sources = [
+        {"name": n, "label": f"{n} test", "url": f"https://example.test/{n}", "sha256": "0" * 64}
+        for n in ["onspd", "nhsbsa", "contractor_details", "phs", "osm", "ods_wales"]
+    ]
+    (cache / "sources.json").write_text(json.dumps(sources))
+    return cache

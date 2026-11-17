@@ -36,8 +36,18 @@ def area_bbox(points: Iterable[LatLon], margin_m: int = 3000) -> BBox:
 
 def osmium_extract_command(src_pbf: Path, bbox: BBox, dest: Path) -> list[str]:
     box = ",".join(str(v) for v in bbox)
-    return ["osmium", "extract", "--strategy", "smart", "-b", box, str(src_pbf),
-            "-o", str(dest), "--overwrite"]  # fmt: skip
+    return [
+        "osmium",
+        "extract",
+        "--strategy",
+        "smart",
+        "-b",
+        box,
+        str(src_pbf),
+        "-o",
+        str(dest),
+        "--overwrite",
+    ]
 
 
 def clip_extract(src_pbf: Path, bbox: BBox, dest: Path) -> Path:
@@ -69,9 +79,26 @@ def osrm_server(pbf: Path, profile: Profile, image: str, port: int) -> Iterator[
     _run([*docker, "osrm-customize", "/data/area.osrm"])
 
     name = f"within-reach-osrm-{profile}-{port}"
-    _run(["docker", "run", "-d", "--rm", "--name", name, "-p", f"127.0.0.1:{port}:5000",
-          *mount, image, "osrm-routed", "--algorithm", "mld", "--max-table-size", "1000",
-          "/data/area.osrm"])  # fmt: skip
+    _run(
+        [
+            "docker",
+            "run",
+            "-d",
+            "--rm",
+            "--name",
+            name,
+            "-p",
+            f"127.0.0.1:{port}:5000",
+            *mount,
+            image,
+            "osrm-routed",
+            "--algorithm",
+            "mld",
+            "--max-table-size",
+            "1000",
+            "/data/area.osrm",
+        ]
+    )
     base_url = f"http://127.0.0.1:{port}"
     try:
         deadline = time.monotonic() + 120

@@ -4,11 +4,15 @@ import argparse
 import hashlib
 import json
 import logging
+import re
 import shutil
 import zipfile
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
+from within_reach_pipeline.bundle import merge_manifests, write_manifest
 from within_reach_pipeline.config import load_config
 from within_reach_pipeline.http import Fetcher, HttpxFetcher
 from within_reach_pipeline.onspd import read_onspd
@@ -89,14 +93,58 @@ def fetch(cache: Path, fetcher: Fetcher) -> list[dict[str, str]]:
     return sources
 
 
+def _release_name(value: str) -> str:
+    if not re.fullmatch(r"\d{4}-\d{2}", value):
+        raise argparse.ArgumentTypeError("release must look like YYYY-MM")
+    return value
+
+
+def merge(out: Path, shard_dirs: Sequence[Path]) -> dict[str, Any]:
+    base = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    shards = [json.loads((d / "manifest.json").read_text(encoding="utf-8")) for d in shard_dirs]
+    merged = merge_manifests(base, shards)
+    for shard_dir in shard_dirs:
+        if (shard_dir / "areas").exists():
+            shutil.copytree(shard_dir / "areas", out / "areas", dirs_exist_ok=True)
+    write_manifest(out, merged)
+    return merged
+
+
 def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
     parser = argparse.ArgumentParser(prog="within-reach-pipeline")
     commands = parser.add_subparsers(dest="command", required=True)
     fetch_cmd = commands.add_parser("fetch", help="download the latest public data")
     fetch_cmd.add_argument("--cache", type=Path, required=True)
+
+    build_cmd = commands.add_parser("build", help="build a release from a fetch cache")
+    build_cmd.add_argument("--cache", type=Path, required=True)
+    build_cmd.add_argument("--release", type=_release_name, required=True)
+    build_cmd.add_argument("--out", type=Path, required=True)
+    build_cmd.add_argument(
+        "--areas",
+        nargs="*",
+        default=None,
+        help="area codes to build; omit for all, give none for shared files only",
+    )
+    build_cmd.add_argument("--router", choices=["osrm", "fake"], default="osrm")
+    build_cmd.add_argument("--built-at", default=None, help="ISO time (default: now, UTC)")
+
+    merge_cmd = commands.add_parser("merge", help="merge area shards into a release")
+    merge_cmd.add_argument("--out", type=Path, required=True)
+    merge_cmd.add_argument("shards", type=Path, nargs="+")
+
     args = parser.parse_args(list(argv))
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     if args.command == "fetch":
         fetch(args.cache, fetcher or HttpxFetcher(load_config().user_agent))
+    elif args.command == "build":
+        from within_reach_pipeline.build import build_release
+
+        built_at = args.built_at or datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        build_release(
+            args.cache, args.release, args.out, args.areas, args.router, load_config(), built_at
+        )
+    elif args.command == "merge":
+        merge(args.out, args.shards)
     return 0

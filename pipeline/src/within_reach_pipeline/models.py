@@ -12,7 +12,7 @@ DayHours = tuple[tuple[str, str], ...] | None
 OpeningHours = dict[Weekday, DayHours]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)  # ~1.7M instances in a full GB build
 class Postcode:
     postcode: str
     lat: float
