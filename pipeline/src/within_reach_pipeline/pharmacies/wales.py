@@ -20,15 +20,10 @@ def fetch_ods_wales(
     pharmacies: list[RawPharmacy] = []
     offset = 0
     while True:
-        page: dict[str, Any] = fetcher.get_json(
-            ORD_ORGANISATIONS,
-            params={
-                "PrimaryRoleId": PHARMACY_ROLE,
-                "Status": "Active",
-                "Limit": str(PAGE_SIZE),
-                "Offset": str(offset),
-            },
-        )
+        params = {"PrimaryRoleId": PHARMACY_ROLE, "Status": "Active", "Limit": str(PAGE_SIZE)}
+        if offset:  # Offset = records to skip; the API rejects Offset=0, so omit it at first
+            params["Offset"] = str(offset)
+        page: dict[str, Any] = fetcher.get_json(ORD_ORGANISATIONS, params=params)
         organisations = page.get("Organisations", [])
         for summary in organisations:
             postcode = normalise_postcode(summary.get("PostCode", ""))

@@ -41,7 +41,8 @@ class FakeFetcher:
             return json.loads((FIXTURES / "arcgis_onspd_search.json").read_text())
         if url.endswith("/organisations"):
             assert params is not None
-            if params["Offset"] == "0":
+            assert params.get("Offset") != "0", "ORD rejects Offset=0"
+            if "Offset" not in params:
                 return json.loads((FIXTURES / "ods_list.json").read_text())
             return {"Organisations": []}
         if "/organisations/" in url:

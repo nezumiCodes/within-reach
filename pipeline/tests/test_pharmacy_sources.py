@@ -54,7 +54,9 @@ class FakeFetcher:
             assert params is not None
             assert params["PrimaryRoleId"] == "RO182"
             assert params["Status"] == "Active"
-            return self.pages[int(params["Offset"]) // 1000]
+            # Like the real ORD API: Offset is "records to skip" and 0 is rejected (406).
+            assert params.get("Offset") != "0", "ORD rejects Offset=0"
+            return self.pages[int(params.get("Offset", "0")) // 1000]
         self.detail_calls.append(url)
         return self.org
 
