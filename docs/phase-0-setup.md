@@ -5,7 +5,7 @@ These steps need your accounts, so they can't be automated. Do them in order. Ea
 ## 1. Lock down accounts
 
 1. **GitHub:** turn on 2FA (Settings → Password and authentication), with a passkey or hardware key if you can.
-2. **GitHub verified domain:** Settings → Pages → Add a verified domain → `vasnik.net`. GitHub gives you a TXT record to add at GoDaddy (step 3). This stops anyone else's GitHub Pages site from claiming a `*.vasnik.net` subdomain.
+2. **GitHub verified domain:** this is in your **account** settings, not the repository's. Profile picture → Settings → Pages (under "Code, planning, and automation") → Add a domain → `vasnik.net`. GitHub gives you a TXT record named `_github-pages-challenge-<username>` to add at GoDaddy (step 3), then you click Verify. This stops anyone else's GitHub Pages site from claiming a `*.vasnik.net` subdomain.
 3. **Cloudflare:** create a free account at dash.cloudflare.com and turn on 2FA (My Profile → Authentication).
 4. **GoDaddy:** check that 2FA is on. Whoever controls DNS controls what code the site's users run.
 
@@ -25,7 +25,7 @@ Add these records. Don't change the existing GitHub Pages A/AAAA records or `www
 | Type | Name | Value | Why |
 |---|---|---|---|
 | CAA | `@` | `0 issue "pki.goog"` | Lets Cloudflare issue certificates (keep the existing `letsencrypt.org` CAA) |
-| TXT | (from GitHub step 1.2) | (from GitHub) | GitHub domain verification |
+| TXT | `_github-pages-challenge-<username>` (GoDaddy adds `.vasnik.net` itself) | The code GitHub shows in step 1.2 | GitHub domain verification |
 | CNAME | `withinreach` | `within-reach.pages.dev` | Points the tool's subdomain at Cloudflare Pages. Add this in step 5, not before |
 
 Check: `dig +short CAA vasnik.net` shows both `letsencrypt.org` and `pki.goog`.
