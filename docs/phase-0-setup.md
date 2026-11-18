@@ -60,5 +60,4 @@ Settings → Branches → add a rule for `main`: require pull requests and requi
 ## 7. Paperwork (alongside the above)
 
 - [ ] Start the DPIA, using spec section 10 (data flows) and section 11
-- [ ] Email NWSSP to confirm the licence for the Welsh pharmacy list (D15)
 - [ ] Ask a pilot service to open `https://preview.within-reach.pages.dev` on a work device (R1)
