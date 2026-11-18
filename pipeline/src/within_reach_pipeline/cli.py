@@ -154,6 +154,8 @@ def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
 
     args = parser.parse_args(list(argv))
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    # httpx logs every request at INFO; a full build makes millions of OSRM requests.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     if args.command == "fetch":
         fetch(args.cache, fetcher or HttpxFetcher(load_config().user_agent))

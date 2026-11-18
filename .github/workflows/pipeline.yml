@@ -154,7 +154,11 @@ jobs:
         run: |
           uv run within-reach-pipeline build --cache .cache --release "$RELEASE" \
             --out "release/$RELEASE" --areas
-          uv run within-reach-pipeline merge --out "release/$RELEASE" shards/*
+          # One artifact is unpacked straight into shards/, several into shards/<name>/,
+          # so find shard folders by their manifest rather than by glob.
+          mapfile -t shard_dirs < <(find shards -maxdepth 2 -name manifest.json -printf '%h\n' | sort)
+          [ "${#shard_dirs[@]}" -gt 0 ] || { echo "no shards downloaded"; exit 1; }
+          uv run within-reach-pipeline merge --out "release/$RELEASE" "${shard_dirs[@]}"
       - name: Previous release
         id: previous
         run: |

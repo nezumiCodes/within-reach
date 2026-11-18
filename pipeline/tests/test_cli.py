@@ -1,4 +1,6 @@
+import contextlib
 import json
+import logging
 from pathlib import Path
 
 from fakes import FIXTURES, FakeFetcher, onspd_zip_bytes
@@ -43,3 +45,12 @@ def test_ods_wales_roundtrip(tmp_path: Path) -> None:
     items = [RawPharmacy("Wales", "FWF56", "ROWLANDS", ("A", "B"), "LL11 4UF", None)]
     save_ods_wales(items, tmp_path / "w.json")
     assert load_ods_wales(tmp_path / "w.json") == items
+
+
+def test_http_request_logging_is_quiet(tmp_path: Path) -> None:
+    # A full build makes millions of OSRM requests; logging each one floods the Actions log.
+    logging.getLogger().setLevel(logging.INFO)
+    logging.getLogger("httpx").setLevel(logging.NOTSET)
+    with contextlib.suppress(FileNotFoundError):  # only the logging setup matters here
+        cli.run(["check", "--release-dir", str(tmp_path / "missing")])
+    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
