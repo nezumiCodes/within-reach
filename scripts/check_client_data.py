@@ -3,7 +3,8 @@
 
 Rules:
   1. Spreadsheet and data files (.csv, .tsv, .xlsx, .xls, .xlsm, .ods) may only be committed
-     under fixtures/synthetic/.
+     under fixtures/synthetic/ (synthetic client data) or pipeline/tests/fixtures/ (small
+     samples of public data). Both are still scanned by rules 2 and 3.
   2. CSV/TSV files there must not have columns that look like names, NHS numbers or dates of
      birth, and every client_ref value must start with "SYN-".
   3. No committed CSV/TSV may contain a 10-digit number that passes the NHS number check digit.
@@ -21,6 +22,7 @@ from pathlib import Path, PurePosixPath
 DATA_SUFFIXES = {".csv", ".tsv", ".xlsx", ".xls", ".xlsm", ".ods"}
 TEXT_TABLE_SUFFIXES = {".csv", ".tsv"}
 SYNTHETIC_DIR = PurePosixPath("fixtures/synthetic")
+ALLOWED_DIRS = (SYNTHETIC_DIR, PurePosixPath("pipeline/tests/fixtures"))
 FORBIDDEN_COLUMN = re.compile(
     r"^(first_?name|last_?name|sur_?name|full_?name|forename|name|"
     r"nhs_?(no|num|number)?|nhs number|chi_?(no|number)?|dob|date_?of_?birth)$",
@@ -44,8 +46,9 @@ def problems_for(path: Path, repo_relative: PurePosixPath) -> list[str]:
     suffix = path.suffix.lower()
     if suffix not in DATA_SUFFIXES:
         return []
-    if SYNTHETIC_DIR not in repo_relative.parents:
-        return [f"{repo_relative}: data files may only be committed under {SYNTHETIC_DIR}/"]
+    if not any(allowed in repo_relative.parents for allowed in ALLOWED_DIRS):
+        allowed_list = " or ".join(f"{d}/" for d in ALLOWED_DIRS)
+        return [f"{repo_relative}: data files may only be committed under {allowed_list}"]
     if suffix not in TEXT_TABLE_SUFFIXES:
         return []
 

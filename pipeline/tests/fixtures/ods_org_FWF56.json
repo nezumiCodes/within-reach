@@ -1,0 +1,19 @@
+{
+ "Organisation": {
+  "Name": "ROWLANDS PHARMACY",
+  "OrgId": {
+   "extension": "FWF56"
+  },
+  "Status": "Active",
+  "GeoLoc": {
+   "Location": {
+    "AddrLn1": "PEN Y MAES HEALTH CENTRE",
+    "AddrLn2": "BEECH STREET",
+    "AddrLn3": "SUMMERHILL",
+    "Town": "WREXHAM",
+    "PostCode": "LL11 4UF",
+    "Country": "WALES"
+   }
+  }
+ }
+}
