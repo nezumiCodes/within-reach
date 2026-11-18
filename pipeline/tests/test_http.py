@@ -66,3 +66,12 @@ def test_dropped_connections_retried_five_times() -> None:
     fetcher = HttpxFetcher(UA, transport=httpx.MockTransport(handler), backoff_s=0)
     assert fetcher.get_json("https://example.test/api") == {"ok": 1}
     assert calls["n"] == 5
+
+
+def test_default_client_connects_over_ipv4_only() -> None:
+    # GitHub's runners have no IPv6 route. Hosts with AAAA records (Geofabrik) failed with
+    # "[Errno 101] Network is unreachable" on every retry (pipeline run 44350937497).
+    from within_reach_pipeline.http import HttpxFetcher
+
+    transport = HttpxFetcher("test-agent")._client._transport
+    assert transport._pool._local_address == "0.0.0.0"  # type: ignore[attr-defined]  # noqa: S104

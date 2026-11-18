@@ -29,7 +29,9 @@ class HttpxFetcher:
     ) -> None:
         self._client = httpx.Client(
             headers={"User-Agent": user_agent},
-            transport=transport,
+            # IPv4 only: GitHub's runners have no IPv6 route, and httpx doesn't fall back to
+            # IPv4 when a host (Geofabrik, for one) also publishes IPv6 addresses.
+            transport=transport or httpx.HTTPTransport(local_address="0.0.0.0"),  # noqa: S104
             timeout=timeout_s,
             follow_redirects=True,
         )
