@@ -38,8 +38,16 @@ OSMIUM_IMAGE = "within-reach-osmium:1"
 OSMIUM_DOCKERFILE = Path(__file__).resolve().parents[3] / "docker" / "osmium.Dockerfile"
 
 
+def coord(value: float) -> str:
+    """A coordinate as a plain decimal, 6 places (about 10 cm).
+
+    str() would give "-7.7e-05" near the Greenwich meridian, which OSRM and osmium reject.
+    """
+    return f"{value:.6f}"
+
+
 def osmium_extract_command(src_pbf: Path, bbox: BBox, dest: Path) -> list[str]:
-    box = ",".join(str(v) for v in bbox)
+    box = ",".join(coord(v) for v in bbox)
     return [
         "osmium",
         "extract",
@@ -160,7 +168,7 @@ class OsrmRouter:
         self.profile = profile
 
     def table(self, sources: Sequence[LatLon], destinations: Sequence[LatLon]) -> TableResult:
-        coords = ";".join(f"{lon},{lat}" for lat, lon in [*sources, *destinations])
+        coords = ";".join(f"{coord(lon)},{coord(lat)}" for lat, lon in [*sources, *destinations])
         source_ids = ";".join(str(i) for i in range(len(sources)))
         dest_ids = ";".join(str(len(sources) + i) for i in range(len(destinations)))
         url = (

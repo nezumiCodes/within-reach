@@ -29,9 +29,19 @@ def test_osrm_url_format() -> None:
     router = OsrmRouter("http://localhost:5000", fetcher, profile="foot")
     router.table([(53.19, -2.89), (53.20, -2.88)], [(53.05, -3.0)])
     assert fetcher.urls == [
-        "http://localhost:5000/table/v1/foot/-2.89,53.19;-2.88,53.2;-3.0,53.05"
+        "http://localhost:5000/table/v1/foot/-2.890000,53.190000;-2.880000,53.200000;"
+        "-3.000000,53.050000"
         "?sources=0;1&destinations=2&annotations=distance,duration"
     ]
+
+
+def test_osrm_coordinates_near_greenwich_are_plain_decimals() -> None:
+    # Python prints -0.000077 as "-7.7e-05", which OSRM rejects as InvalidQuery
+    # (first full GB run, Lewisham, 18 Nov 2026).
+    fetcher = RecordingFetcher({"code": "Ok", "distances": [[1.0]], "durations": [[1.0]]})
+    OsrmRouter("http://x", fetcher, profile="foot").table([(51.421856, -0.000077)], [(51.4, 5e-05)])
+    assert "/-0.000077,51.421856;0.000050,51.400000?" in fetcher.urls[0]
+    assert "e-" not in fetcher.urls[0]
 
 
 def test_osrm_values_rounded_and_nulls_become_none() -> None:
@@ -68,12 +78,17 @@ def test_osmium_extract_command() -> None:
         "--strategy",
         "smart",
         "-b",
-        "-3.1,52.9,-2.7,53.3",
+        "-3.100000,52.900000,-2.700000,53.300000",
         "/in/uk.osm.pbf",
         "-o",
         "/out/area.osm.pbf",
         "--overwrite",
     ]
+
+
+def test_osmium_bbox_near_greenwich_is_plain_decimals() -> None:
+    cmd = osmium_extract_command(Path("/in.pbf"), (-0.00004, 51.3, 0.2, 51.6), Path("/out.pbf"))
+    assert cmd[cmd.index("-b") + 1] == "-0.000040,51.300000,0.200000,51.600000"
 
 
 def test_osmium_runs_in_docker_when_not_installed() -> None:
@@ -96,7 +111,7 @@ def test_osmium_runs_in_docker_when_not_installed() -> None:
         "--strategy",
         "smart",
         "-b",
-        "-3.1,52.9,-2.7,53.3",
+        "-3.100000,52.900000,-2.700000,53.300000",
         "/in/uk.osm.pbf",
         "-o",
         "/out/area.osm.pbf",
