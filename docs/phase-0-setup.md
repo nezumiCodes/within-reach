@@ -24,7 +24,8 @@ Add these records. Don't change the existing GitHub Pages A/AAAA records or `www
 
 | Type | Name | Value | Why |
 |---|---|---|---|
-| CAA | `@` | `0 issue "pki.goog"` | Lets Cloudflare issue certificates (keep the existing `letsencrypt.org` CAA) |
+| CAA | `@` | Flag `0`, tag `issue`, value `pki.goog; cansignhttpexchanges=yes` | Google Trust Services, one of the authorities Cloudflare uses for the tool's certificate |
+| CAA | `@` | Flag `0`, tag `issue`, value `ssl.com` | SSL.com, another authority Cloudflare uses. Keep the existing `letsencrypt.org` record, which both GitHub Pages and Cloudflare use |
 | TXT | `_github-pages-challenge-<username>` (GoDaddy adds `.vasnik.net` itself) | The code GitHub shows in step 1.2 | GitHub domain verification |
 | CNAME | `withinreach` | `within-reach.pages.dev` | Points the tool's subdomain at Cloudflare Pages. Add this in step 5, not before |
 
