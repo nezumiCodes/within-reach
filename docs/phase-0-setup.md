@@ -39,9 +39,10 @@ Check: `dig +short CAA vasnik.net` shows both `letsencrypt.org` and `pki.goog`.
    - Account resources: your account only
    - Optional: a TTL of a year, with a calendar reminder to rotate it
 2. Copy your Account ID (Workers & Pages overview, right-hand side).
-3. GitHub repo → Settings → Secrets and variables → Actions:
-   - Secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
-   - Variables: `DEPLOY_ENABLED` = `true`
+3. GitHub repo → Settings → Environments → New environment `cloudflare`:
+   - Deployment branches and tags: **Selected branches and tags**. Add the branch `main` and the tag pattern `v*`. Leave required reviewers off, or the monthly redeploy waits for approval.
+   - Environment secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`. Only deploys from `main` or a release tag can read them.
+   - Then Settings → Secrets and variables → Actions → Variables (repository): `DEPLOY_ENABLED` = `true`. It's checked before the job starts, so it can't be an environment variable.
 4. Re-run the **Deploy** workflow (Actions → Deploy → Run workflow). Check: `https://preview.within-reach.pages.dev` shows the placeholder.
 
 ## 5. Custom domain
