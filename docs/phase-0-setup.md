@@ -55,7 +55,19 @@ Check: `curl -sI https://withinreach.vasnik.net` shows `content-security-policy`
 
 ## 6. Branch protection (once the repo is public, or on a paid plan)
 
-Settings → Branches → add a rule for `main`: require pull requests and require the **CI** checks to pass. Free private repositories don't enforce branch protection, so this waits until the repo goes public at the Phase 0 gate.
+Free private repositories don't enforce branch protection, so this waits until the repo goes public at the Phase 0 gate.
+
+Repository Settings → Branches → **Add classic branch protection rule**:
+
+- Branch name pattern: `main`
+- ✅ Require a pull request before merging. Required approvals: **0** (GitHub doesn't let you approve your own pull request).
+- ✅ Require status checks to pass before merging, and ✅ require branches to be up to date. Add the three CI checks: `Secrets and client-data guards`, `Pipeline (Python)` and `App (TypeScript)`. They appear in the search box once they've run on a pull request.
+- ✅ Do not allow bypassing the above settings (applies to admins too).
+- Leave force pushes and deletions blocked.
+
+The monthly pipeline records each release on the unprotected `data-log` branch, not `main`, so this rule doesn't block it.
+
+**Check:** `git push origin main` with any change is rejected with a message that changes must go through a pull request.
 
 ## 7. Paperwork (alongside the above)
 

@@ -125,7 +125,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
-      contents: write # create the release and record it in data/RELEASES.md
+      contents: write # create the release and record it on the data-log branch
     env:
       RELEASE: ${{ needs.prepare.outputs.release }}
       PARTIAL: ${{ needs.prepare.outputs.partial }}
@@ -135,6 +135,8 @@ jobs:
         working-directory: pipeline
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - run: uv sync --locked
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -188,19 +190,10 @@ jobs:
             --title "Data release $RELEASE$([ "$PARTIAL" = "true" ] && echo ' (partial)')" \
             --notes "Automated data release. See manifest.json inside for sources and checksums."
       - name: Record release (keeps the monthly schedule active)
+        # Writes to the data-log branch through the API, because main is protected.
         if: github.ref == 'refs/heads/main'
         working-directory: .
-        run: |
-          mkdir -p data
-          [ -f data/RELEASES.md ] || printf '# Data releases\n\n' > data/RELEASES.md
-          suffix=""; [ "$PARTIAL" = "true" ] && suffix="-partial (prerelease)"
-          echo "- data-$RELEASE$suffix published $(date -u +%Y-%m-%dT%H:%MZ)" >> data/RELEASES.md
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/RELEASES.md
-          git commit -m "data: record release data-$RELEASE"
-          git pull --rebase origin main
-          git push origin HEAD:main
+        run: bash scripts/record_release.sh
 
   alert:
     needs: [prepare, build, assemble]
