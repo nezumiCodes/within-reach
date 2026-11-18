@@ -48,12 +48,10 @@ Never commit real client data. Spreadsheets and CSVs are ignored by git, except 
 When released, this tool will use:
 
 - Public sector information licensed under the Open Government Licence v3.0 (ONS Postcode
-  Directory, NHSBSA, Public Health Scotland)
+  Directory, NHSBSA, Public Health Scotland, NHS Organisation Data Service)
 - Contains OS data © Crown copyright and database right
 - Map data © OpenStreetMap contributors, available under the Open Database Licence. The
   published travel tables are offered under the ODbL.
-
-The NHS Wales Shared Services Partnership list's licence is still being confirmed (D15).
 
 ## Licence
 
