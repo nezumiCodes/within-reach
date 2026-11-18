@@ -83,7 +83,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     strategy:
-      fail-fast: true
+      # Let every shard finish, so one run shows all failing areas. Nothing publishes unless
+      # every shard succeeds, because assemble needs the whole build job.
+      fail-fast: false
       max-parallel: 8
       matrix:
         areas: ${{ fromJSON(needs.prepare.outputs.shards) }}
