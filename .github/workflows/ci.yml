@@ -77,11 +77,19 @@ jobs:
             const inline = [...html.matchAll(/<script\b([^>]*)>/gi)].filter((m) => !/\bsrc=/.test(m[1]));
             if (inline.length || /\son[a-z]+=/i.test(html)) { console.error('Inline script found'); process.exit(1); }
           "
-      - name: Install test browsers (retried; the Edge download is sometimes flaky)
+      - name: Install test browsers
+        # GitHub's Ubuntu runners ship Microsoft Edge; installing it ourselves is the flaky part.
+        # No per-attempt kill: stopping apt midway leaves its lock held and breaks the retries.
         timeout-minutes: 15
         run: |
+          browsers=(chromium firefox webkit)
+          if command -v microsoft-edge-stable > /dev/null; then
+            echo "Using the runner's Edge: $(microsoft-edge-stable --version)"
+          else
+            browsers+=(msedge)
+          fi
           for attempt in 1 2 3; do
-            timeout 300 npx playwright install --with-deps chromium firefox webkit msedge && exit 0
+            npx playwright install --with-deps "${browsers[@]}" && exit 0
             echo "Browser install attempt $attempt failed; retrying"; sleep 15
           done
           exit 1
