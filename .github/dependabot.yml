@@ -5,6 +5,14 @@ updates:
     schedule: { interval: weekly }
     groups:
       dev-tooling: { dependency-type: development }
+    ignore:
+      # svelte-check supports TypeScript 5 and 6 only. Remove this when it supports 7.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      # Node's type definitions should track the Node version CI and deploy run (22),
+      # not the newest Node.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: uv
     directory: /pipeline
     schedule: { interval: weekly }
