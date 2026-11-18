@@ -1,0 +1,33 @@
+{
+ "success": true,
+ "result": {
+  "name": "dispenser-location-contact-details",
+  "license_title": "UK Open Government Licence (OGL)",
+  "resources": [
+   {
+    "name": "Dispenser Details - August 2026",
+    "format": "CSV",
+    "url": "https://www.opendata.nhs.scot/dataset/a30fde16-1226-49b3-b13d-eb90e39c2058/resource/da1053b6-f02c-4010-9226-964151f1d2ee/download/dispenser_contactdetails_202608.csv",
+    "created": "2026-11-17T09:28:31.901210"
+   },
+   {
+    "name": "Dispenser Details - July 2026",
+    "format": "CSV",
+    "url": "https://www.opendata.nhs.scot/dataset/a30fde16-1226-49b3-b13d-eb90e39c2058/resource/94ce388f-45cc-4096-8ac8-fb4fd0c593c2/download/dispenser_contactdetails_202607.csv",
+    "created": "2026-10-15T11:57:28.339396"
+   },
+   {
+    "name": "Dispenser Details - June 2026 ",
+    "format": "CSV",
+    "url": "https://www.opendata.nhs.scot/dataset/a30fde16-1226-49b3-b13d-eb90e39c2058/resource/801b1c5a-02e9-49b7-a3c7-884a9144730f/download/dispenser_contactdetails_202606.csv",
+    "created": "2026-09-08T12:54:27.182129"
+   },
+   {
+    "name": "Dispenser Details - May 2026 ",
+    "format": "CSV",
+    "url": "https://www.opendata.nhs.scot/dataset/a30fde16-1226-49b3-b13d-eb90e39c2058/resource/1bde0091-ed1a-4393-aee3-67f60f2b98da/download/dispenser_contactdetails_202605.csv",
+    "created": "2026-08-11T08:33:11.159473"
+   }
+  ]
+ }
+}

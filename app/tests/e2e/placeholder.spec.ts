@@ -53,3 +53,21 @@ test('placeholder page has no accessibility violations (WCAG 2.2 AA)', async ({ 
     .analyze()
   expect(results.violations).toEqual([])
 })
+
+test('data release date is shown (FR-05)', async ({ page }) => {
+  await page.route('**/data/latest.json', (route) =>
+    route.fulfill({ json: { release: '2026-11', previous: null } }),
+  )
+  await page.route('**/data/2026-11/manifest.json', (route) =>
+    route.fulfill({ json: { release: '2026-11', built_at: '2026-11-02T03:00:00Z' } }),
+  )
+  await page.goto('/')
+  await expect(page.getByText('Data release: November 2026')).toBeVisible()
+})
+
+test('no data release shows nothing', async ({ page }) => {
+  await page.route('**/data/**', (route) => route.fulfill({ status: 404, body: '' }))
+  await page.goto('/')
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await expect(page.getByText('Data release')).toHaveCount(0)
+})

@@ -1,0 +1,33 @@
+{
+ "success": true,
+ "result": {
+  "name": "contractor-details",
+  "license_title": "Open Government Licence 3.0 (United Kingdom)",
+  "resources": [
+   {
+    "name": "CONTRACTOR_DETAILS_202607",
+    "format": "CSV",
+    "url": "https://opendata.nhsbsa.net/dataset/d5954d7e-63cd-43d4-aa7e-4a489119f6a7/resource/d7084477-fb46-4727-85a7-b67355aad77a/download/contractor_details_202607.csv",
+    "created": "2026-08-05T07:35:31.786597"
+   },
+   {
+    "name": "CONTRACTOR_DETAILS_202608",
+    "format": "CSV",
+    "url": "https://opendata.nhsbsa.net/dataset/d5954d7e-63cd-43d4-aa7e-4a489119f6a7/resource/d5aaa95b-9c3e-4324-8f5a-8bfa6aabfce9/download/contractor_details_202608.csv",
+    "created": "2026-09-04T06:41:35.383644"
+   },
+   {
+    "name": "CONTRACTOR_DETAILS_202609",
+    "format": "CSV",
+    "url": "https://opendata.nhsbsa.net/dataset/d5954d7e-63cd-43d4-aa7e-4a489119f6a7/resource/847612e9-3fae-4bff-a16f-9de61749ded0/download/contractor_details_202609.csv",
+    "created": "2026-10-02T07:21:04.190918"
+   },
+   {
+    "name": "CONTRACTOR_DETAILS_202610",
+    "format": "CSV",
+    "url": "https://opendata.nhsbsa.net/dataset/d5954d7e-63cd-43d4-aa7e-4a489119f6a7/resource/40eed8f1-87fa-4333-9f41-8d4e7bda438b/download/contractor_details_202610.csv",
+    "created": "2026-11-02T16:40:00.936624"
+   }
+  ]
+ }
+}

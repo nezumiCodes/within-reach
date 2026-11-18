@@ -1,0 +1,33 @@
+{
+ "success": true,
+ "result": {
+  "name": "consolidated-pharmaceutical-list",
+  "license_title": "Open Government Licence 3.0 (United Kingdom)",
+  "resources": [
+   {
+    "name": "CONSOL_PHARMACY_LIST_202526Q3FINAL",
+    "format": "CSV",
+    "url": "https://opendata.nhsbsa.net/dataset/240d142d-df82-4e97-b051-12371519e4e1/resource/7bd7b192-d3a5-44f2-8f7d-3c510cc4a8e5/download/consol_pharmacy_list_202526q3final.csv",
+    "created": "2026-03-12T14:10:35.798783"
+   },
+   {
+    "name": "CONSOL_PHARMACY_LIST_202526Q4",
+    "format": "CSV",
+    "url": "https://opendata.nhsbsa.net/dataset/240d142d-df82-4e97-b051-12371519e4e1/resource/cb95a2d0-0677-4121-98a1-6c6dc340c3ce/download/consol_pharmacy_list_202526q4.csv",
+    "created": "2026-05-06T08:48:28.813863"
+   },
+   {
+    "name": "CONSOL_PHARMACY_LIST_202606Q1",
+    "format": "CSV",
+    "url": "https://opendata.nhsbsa.net/dataset/240d142d-df82-4e97-b051-12371519e4e1/resource/ce6c7ad3-a3b5-442f-bb0a-a45d7c962944/download/consol_pharmacy_list_202606q1.csv",
+    "created": "2026-07-29T10:16:19.170930"
+   },
+   {
+    "name": "CONSOL_PHARMACY_LIST_202627Q2",
+    "format": "CSV",
+    "url": "https://opendata.nhsbsa.net/dataset/240d142d-df82-4e97-b051-12371519e4e1/resource/33da902b-b951-4a86-a0ee-5eb8e2139e49/download/consol_pharmacy_list_202627q2.csv",
+    "created": "2026-10-22T14:46:53.839215"
+   }
+  ]
+ }
+}

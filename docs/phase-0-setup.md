@@ -5,7 +5,7 @@ These steps need your accounts, so they can't be automated. Do them in order. Ea
 ## 1. Lock down accounts
 
 1. **GitHub:** turn on 2FA (Settings → Password and authentication), with a passkey or hardware key if you can.
-2. **GitHub verified domain:** Settings → Pages → Add a verified domain → `vasnik.net`. GitHub gives you a TXT record to add at GoDaddy (step 3). This stops anyone else's GitHub Pages site from claiming a `*.vasnik.net` subdomain.
+2. **GitHub verified domain:** this is in your **account** settings, not the repository's. Profile picture → Settings → Pages (under "Code, planning, and automation") → Add a domain → `vasnik.net`. GitHub gives you a TXT record named `_github-pages-challenge-<username>` to add at GoDaddy (step 3), then you click Verify. This stops anyone else's GitHub Pages site from claiming a `*.vasnik.net` subdomain.
 3. **Cloudflare:** create a free account at dash.cloudflare.com and turn on 2FA (My Profile → Authentication).
 4. **GoDaddy:** check that 2FA is on. Whoever controls DNS controls what code the site's users run.
 
@@ -24,8 +24,9 @@ Add these records. Don't change the existing GitHub Pages A/AAAA records or `www
 
 | Type | Name | Value | Why |
 |---|---|---|---|
-| CAA | `@` | `0 issue "pki.goog"` | Lets Cloudflare issue certificates (keep the existing `letsencrypt.org` CAA) |
-| TXT | (from GitHub step 1.2) | (from GitHub) | GitHub domain verification |
+| CAA | `@` | Flag `0`, tag `issue`, value `pki.goog; cansignhttpexchanges=yes` | Google Trust Services, one of the authorities Cloudflare uses for the tool's certificate |
+| CAA | `@` | Flag `0`, tag `issue`, value `ssl.com` | SSL.com, another authority Cloudflare uses. Keep the existing `letsencrypt.org` record, which both GitHub Pages and Cloudflare use |
+| TXT | `_github-pages-challenge-<username>` (GoDaddy adds `.vasnik.net` itself) | The code GitHub shows in step 1.2 | GitHub domain verification |
 | CNAME | `withinreach` | `within-reach.pages.dev` | Points the tool's subdomain at Cloudflare Pages. Add this in step 5, not before |
 
 Check: `dig +short CAA vasnik.net` shows both `letsencrypt.org` and `pki.goog`.
@@ -38,9 +39,10 @@ Check: `dig +short CAA vasnik.net` shows both `letsencrypt.org` and `pki.goog`.
    - Account resources: your account only
    - Optional: a TTL of a year, with a calendar reminder to rotate it
 2. Copy your Account ID (Workers & Pages overview, right-hand side).
-3. GitHub repo → Settings → Secrets and variables → Actions:
-   - Secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
-   - Variables: `DEPLOY_ENABLED` = `true`
+3. GitHub repo → Settings → Environments → New environment `cloudflare`:
+   - Deployment branches and tags: **Selected branches and tags**. Add the branch `main` and the tag pattern `v*`. Leave required reviewers off, or the monthly redeploy waits for approval.
+   - Environment secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`. Only deploys from `main` or a release tag can read them.
+   - Then Settings → Secrets and variables → Actions → Variables (repository): `DEPLOY_ENABLED` = `true`. It's checked before the job starts, so it can't be an environment variable.
 4. Re-run the **Deploy** workflow (Actions → Deploy → Run workflow). Check: `https://preview.within-reach.pages.dev` shows the placeholder.
 
 ## 5. Custom domain
@@ -55,10 +57,21 @@ Check: `curl -sI https://withinreach.vasnik.net` shows `content-security-policy`
 
 ## 6. Branch protection (once the repo is public, or on a paid plan)
 
-Settings → Branches → add a rule for `main`: require pull requests and require the **CI** checks to pass. Free private repositories don't enforce branch protection, so this waits until the repo goes public at the Phase 0 gate.
+Free private repositories don't enforce branch protection, so this waits until the repo goes public at the Phase 0 gate.
+
+Repository Settings → Branches → **Add classic branch protection rule**:
+
+- Branch name pattern: `main`
+- ✅ Require a pull request before merging. Required approvals: **0** (GitHub doesn't let you approve your own pull request).
+- ✅ Require status checks to pass before merging, and ✅ require branches to be up to date. Add the three CI checks: `Secrets and client-data guards`, `Pipeline (Python)` and `App (TypeScript)`. They appear in the search box once they've run on a pull request.
+- ✅ Do not allow bypassing the above settings (applies to admins too).
+- Leave force pushes and deletions blocked.
+
+The monthly pipeline records each release on the unprotected `data-log` branch, not `main`, so this rule doesn't block it.
+
+**Check:** `git push origin main` with any change is rejected with a message that changes must go through a pull request.
 
 ## 7. Paperwork (alongside the above)
 
 - [ ] Start the DPIA, using spec section 10 (data flows) and section 11
-- [ ] Email NWSSP to confirm the licence for the Welsh pharmacy list (D15)
 - [ ] Ask a pilot service to open `https://preview.within-reach.pages.dev` on a work device (R1)

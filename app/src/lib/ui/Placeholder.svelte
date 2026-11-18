@@ -1,3 +1,14 @@
+<script lang="ts">
+  import { onMount } from 'svelte'
+  import { formatRelease, loadRelease, type ReleaseInfo } from '../data/release'
+
+  let release: ReleaseInfo | null = $state(null)
+
+  onMount(async () => {
+    release = await loadRelease()
+  })
+</script>
+
 <main>
   <h1>Within Reach</h1>
   <p class="lede">
@@ -12,6 +23,9 @@
   </p>
 
   <footer>
+    {#if release}
+      <p>Data release: {formatRelease(release.release)}</p>
+    {/if}
     <p>
       Will contain public sector information licensed under the Open Government Licence v3.0, and
       data © OpenStreetMap contributors (ODbL).
