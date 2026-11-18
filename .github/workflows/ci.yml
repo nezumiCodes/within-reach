@@ -16,6 +16,7 @@ jobs:
   repo-guards:
     name: Secrets and client-data guards
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -31,6 +32,7 @@ jobs:
   pipeline:
     name: Pipeline (Python)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: pipeline
@@ -49,6 +51,7 @@ jobs:
   app:
     name: App (TypeScript)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: app
@@ -74,7 +77,14 @@ jobs:
             const inline = [...html.matchAll(/<script\b([^>]*)>/gi)].filter((m) => !/\bsrc=/.test(m[1]));
             if (inline.length || /\son[a-z]+=/i.test(html)) { console.error('Inline script found'); process.exit(1); }
           "
-      - run: npx playwright install --with-deps chromium firefox webkit msedge
+      - name: Install test browsers (retried; the Edge download is sometimes flaky)
+        timeout-minutes: 15
+        run: |
+          for attempt in 1 2 3; do
+            timeout 300 npx playwright install --with-deps chromium firefox webkit msedge && exit 0
+            echo "Browser install attempt $attempt failed; retrying"; sleep 15
+          done
+          exit 1
       - name: Browser, privacy and accessibility tests
         run: npm run test:e2e
         env:
