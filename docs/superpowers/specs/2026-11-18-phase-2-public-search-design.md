@@ -1,6 +1,6 @@
 # Phase 2 design: public pharmacy search with a private map
 
-Status: draft for approval, 18 November 2026.
+Status: draft for approval, 18 November 2026. Builder check done on 19 November 2026; its answers are folded in below.
 Spec: `~/Downloads/Within Reach Tool.md` (draft 0.6). Master plan: `~/.claude/plans/i-am-working-on-indexed-fountain.md`.
 
 ## 1. Intent
@@ -158,6 +158,7 @@ Three checkboxes. When more than one is ticked, a pharmacy must match all of the
 - **Drawn in the map:** the pins are a GeoJSON source with circle and symbol layers, using the self-hosted glyphs. There are no DOM markers and no sprite sheet.
 - **For assistive technology:** the canvas container has `role="img"` and the label "Map of the postcode and the N pharmacies listed". Pins aren't separately keyboard-focusable, because the list carries all the same information. Map keyboard pan and zoom stay on.
 - **Attribution:** "© OpenStreetMap contributors" is always visible.
+- **Zooming in:** the map file stops at zoom 13. MapLibre's `maxZoom` is set to about 16, so users can still zoom in: zoom-13 tiles are enlarged ("overzoomed"), and lines and labels stay sharp because they're vectors. *Builder's call on the exact limit.*
 - **Loading order:** the list doesn't wait for the map. While the map downloads, its panel shows "Loading map…" with a progress bar (bytes received out of the manifest size).
 
 ### Data release line
@@ -168,7 +169,7 @@ The header shows "Data from November 2026", using the existing `loadRelease`/`fo
 1. **On page load:** fetch `/data/latest.json` and `/data/<release>/manifest.json` (existing code). These are the same for every visitor.
 2. **On the first search:** fetch `districts.csv.gz` and `pharmacies.csv.gz` (both GB-wide, the same for everyone). Verify, decompress and keep them in memory for the session.
 3. **Find the area:** take the outward code from the normalised postcode and look up its area code(s) in the districts file. If there isn't one, show "couldn't find".
-4. **Download each area** for that district: `postcodes.csv.gz` and `travel.csv.gz`. A district can span two or more areas; download all of them, so the host learns the district's set of areas, which is still area level. Verify against the manifest, then decompress with the native `DecompressionStream('gzip')`.
+4. **Download each area** for that district: `postcodes.csv.gz` and `travel.csv.gz`. A district can span two or more areas; download all of them, so the host learns the district's set of areas, which is still area level. Verify against the manifest, then decompress with the native `DecompressionStream('gzip')`. Checked on 19 Nov 2026: the live site serves `.csv.gz` files as `content-type: application/gzip` with no `Content-Encoding`, so `fetch` returns the raw gzip bytes and their SHA-256 matches the manifest. A test should pin this: if a host ever adds `Content-Encoding: gzip`, the check must fail loudly rather than unzip twice.
 5. **Find the postcode** in the area that contains it (binary search; the file is sorted). If it's absent, show "couldn't find".
 6. **Build the results** from that postcode's travel rows and the pharmacy directory, then render the list.
 7. **In parallel with steps 5–6, load the map** for the area that contains the postcode. Fetch every chunk, check each chunk's SHA-256, join them into one `ArrayBuffer`, and give it to the PMTiles reader through a custom in-memory source. MapLibre reads tiles through a registered `pmtiles://` protocol. **There are no HTTP range requests and no per-tile requests.**
@@ -255,7 +256,7 @@ The existing folders are kept. *Builder's call on file names:*
   - distance and time formatting;
   - checksum mismatches rejected;
   - chunk joining.
-- **Fixture release:** a small checked-in `/data` release built from real public data for two neighbouring reference areas (or a trimmed copy), with a tiny map file. Searched postcodes in tests are treated like client data by the privacy guard.
+- **Fixture release:** a small checked-in `/data` release built from real public data for two neighbouring reference areas (or a trimmed copy), with a tiny map file. Searched postcodes in tests are treated like client data by the privacy guard. The files stay gzipped (`.csv.gz`), as in a real release. The client-data pre-commit check only looks at `.csv`, `.xlsx` and similar files, so it doesn't block them, and that's correct: they're public reference data, not client data. The e2e setup copies the fixture into the preview build's `/data/`.
 - **Playwright** (Edge, Chrome, Firefox and WebKit, as now), using the existing privacy guard (`tests/e2e/fixtures.ts`). Every test fails on any non-GET request, any other host, or a postcode in a URL, header or body. Added tests:
   - a full search shows the list and the map, and pins match the list numbers;
   - **no request URL for the map contains a tile path or a `Range` header**, and the area's map parts are each fetched once, whole;
