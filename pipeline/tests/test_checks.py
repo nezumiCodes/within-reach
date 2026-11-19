@@ -2,6 +2,7 @@ import dataclasses
 import gzip
 import hashlib
 import json
+import struct
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from fakes import make_cache
 from within_reach_pipeline import cli
 from within_reach_pipeline.checks import CheckFailure, run_checks
 from within_reach_pipeline.config import PipelineConfig, load_config
+from within_reach_pipeline.maps import write_map_entry
 
 # The fixture has 1 online-only pharmacy, not the 200+ a real release has.
 CONFIG = dataclasses.replace(load_config(), distance_selling_min=1, distance_selling_max=10)
@@ -226,3 +228,96 @@ def test_manifest_lists_all_areas(tmp_path: Path) -> None:
     manifest = _manifest(_partial_release(tmp_path))
     assert manifest["all_area_codes"] == ["E06000050", "S12000049", "W11000023"]
     assert manifest["complete"] is False
+
+
+def _postcode_points(release: Path, code: str) -> list[tuple[float, float]]:
+    path = release / "areas" / code / "postcodes.csv.gz"
+    rows = gzip.decompress(path.read_bytes()).decode().splitlines()[1:]
+    return [(float(r.split(",")[2]), float(r.split(",")[3])) for r in rows]
+
+
+def _fake_pmtiles(bounds: tuple[float, float, float, float], size: int = 400) -> bytes:
+    header = bytearray(size)
+    header[:7] = b"PMTiles"
+    header[7] = 3
+    struct.pack_into("<iiii", header, 102, *(round(v * 1e7) for v in bounds))
+    return bytes(header)
+
+
+def _add_maps(release: Path, tmp_path: Path, chunk_bytes: int = 1000, shrink: bool = False) -> None:
+    """Give every area a map covering its postcodes (or, with shrink, missing some)."""
+    manifest = _manifest(release)
+    manifest["config"]["maps"] = "tilemaker"
+    for area in manifest["areas"]:
+        lats, lons = zip(*_postcode_points(release, area["code"]), strict=True)
+        west, south, east, north = (
+            min(lons) - 0.01,
+            min(lats) - 0.01,
+            max(lons) + 0.01,
+            max(lats) + 0.01,
+        )
+        if shrink:
+            north = max(lats) - 0.0001
+        built = tmp_path / f"{area['code']}.pmtiles"
+        built.write_bytes(_fake_pmtiles((west, south, east, north)))
+        area["map"] = write_map_entry(release, area["code"], built, chunk_bytes)
+    _save(release, manifest)
+
+
+def test_valid_release_with_maps_passes(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    _add_maps(release, tmp_path, chunk_bytes=150)
+    assert run_checks(release, CONFIG, None, None) == []
+
+
+def test_map_part_checksum_mismatch_fails(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    _add_maps(release, tmp_path, chunk_bytes=150)
+    part = _manifest(release)["areas"][0]["map"]["parts"][1]["path"]
+    data = bytearray((release / part).read_bytes())
+    data[0] ^= 1
+    (release / part).write_bytes(bytes(data))
+    failures = run_checks(release, CONFIG, None, None)
+    assert any(f.check == "checksums" and part in f.detail for f in failures)
+
+
+def test_map_part_over_limit_fails(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    _add_maps(release, tmp_path)
+    config = dataclasses.replace(CONFIG, max_file_bytes=300)
+    failures = run_checks(release, config, None, None)
+    assert any(f.check == "size" and "map.pmtiles" in f.detail for f in failures)
+
+
+def test_area_without_map_fails_when_maps_built(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    _add_maps(release, tmp_path)
+    manifest = _manifest(release)
+    del manifest["areas"][0]["map"]
+    _save(release, manifest)
+    failures = run_checks(release, CONFIG, None, None)
+    assert [f.detail for f in failures] == [f"{manifest['areas'][0]['code']} has no map"]
+    assert failures[0].check == "maps"
+
+
+def test_joined_map_hash_must_match(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    _add_maps(release, tmp_path, chunk_bytes=150)
+    manifest = _manifest(release)
+    manifest["areas"][0]["map"]["sha256"] = "0" * 64
+    _save(release, manifest)
+    assert _only(run_checks(release, CONFIG, None, None)) == "maps"
+
+
+def test_map_bounds_must_cover_area_postcodes(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    _add_maps(release, tmp_path, shrink=True)
+    failures = run_checks(release, CONFIG, None, None)
+    assert {f.check for f in failures} == {"maps"}
+    assert all("does not cover" in f.detail for f in failures)
+
+
+def test_maps_none_skips_map_checks(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    assert _manifest(release)["config"]["maps"] == "none"
+    assert run_checks(release, CONFIG, None, None) == []

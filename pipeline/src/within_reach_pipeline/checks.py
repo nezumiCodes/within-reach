@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from within_reach_pipeline.config import PipelineConfig
+from within_reach_pipeline.maps import PMTILES_HEADER_BYTES, pmtiles_bounds
 
 NATIONS = ("England", "Scotland", "Wales")
 
@@ -32,6 +33,7 @@ def _files(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     files = [manifest["directory"], manifest["districts"]]
     for area in manifest["areas"]:
         files.extend(area["files"].values())
+        files.extend(area.get("map", {}).get("parts", []))
     return files
 
 
@@ -190,6 +192,35 @@ def _check_reference(
     return failures
 
 
+def _check_maps(release: Path, manifest: dict[str, Any]) -> list[CheckFailure]:
+    """Every area has a map whose joined parts match the manifest and cover its postcodes."""
+    failures: list[CheckFailure] = []
+    for area in manifest["areas"]:
+        code, entry = area["code"], area.get("map")
+        if entry is None:
+            failures.append(CheckFailure("maps", f"{code} has no map"))
+            continue
+        data = b"".join((release / p["path"]).read_bytes() for p in entry["parts"])
+        if hashlib.sha256(data).hexdigest() != entry["sha256"] or len(data) != entry["bytes"]:
+            failures.append(CheckFailure("maps", f"{code} joined map does not match manifest"))
+            continue
+        try:
+            west, south, east, north = pmtiles_bounds(data[:PMTILES_HEADER_BYTES])
+        except ValueError:
+            failures.append(CheckFailure("maps", f"{code} map is not a PMTiles v3 file"))
+            continue
+        outside = [
+            row["postcode"]
+            for row in _rows(release / area["files"]["postcodes"]["path"])
+            if not (south <= float(row["lat"]) <= north and west <= float(row["lon"]) <= east)
+        ]
+        if outside:
+            failures.append(
+                CheckFailure("maps", f"{code} map does not cover {len(outside)} postcodes")
+            )
+    return failures
+
+
 def _check_complete(manifest: dict[str, Any]) -> list[CheckFailure]:
     built = {a["code"] for a in manifest["areas"]}
     missing = sorted(set(manifest.get("all_area_codes", [])) - built)
@@ -217,6 +248,8 @@ def run_checks(
     failures += _check_min_candidates(release_dir, manifest, config)
     failures += _check_geocode(manifest, config.geocode_failure_limit)
     failures += _check_distance_selling(manifest, config)
+    if manifest["config"].get("maps") == "tilemaker":
+        failures += _check_maps(release_dir, manifest)
     if not allow_partial:
         failures += _check_complete(manifest)
     if previous_dir is not None:
