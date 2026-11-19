@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from './fixtures.ts'
 
-test('placeholder page loads under the site CSP', async ({ page }) => {
+test('the page loads under the site CSP', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1, name: 'Within Reach' })).toBeVisible()
 })
@@ -46,7 +46,7 @@ test.describe('CSP enforcement', () => {
   })
 })
 
-test('placeholder page has no accessibility violations (WCAG 2.2 AA)', async ({ page }) => {
+test('the page has no accessibility violations (WCAG 2.2 AA)', async ({ page }) => {
   await page.goto('/')
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
@@ -70,4 +70,10 @@ test('no data release shows nothing', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   await expect(page.getByText('Data release')).toHaveCount(0)
+})
+
+// The preview build has no /data/ files until the fixture release is copied in (Task 10).
+test.fixme('data files are served with no-store', async ({ request }) => {
+  const response = await request.get('/data/latest.json')
+  expect(response.headers()['cache-control']).toBe('no-store')
 })

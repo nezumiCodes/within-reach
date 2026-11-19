@@ -15,6 +15,11 @@
   Cross-Origin-Resource-Policy: same-origin
   Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=(), interest-cohort=(), browsing-topics=()
 
+# Data and map files are never kept by the browser, so a shared device's cache doesn't show which
+# areas were looked up (Phase 2 design, section 6). Repeat searches in one tab use memory instead.
+/data/*
+  Cache-Control: no-store
+
 # Keep preview deployments out of search engines.
 https://:project.pages.dev/*
   X-Robots-Tag: noindex

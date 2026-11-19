@@ -1,24 +1,48 @@
 import { readFileSync } from 'node:fs'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
+import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
 
-/** Read the `/*` block of public/_headers so `vite preview` serves the same headers as Cloudflare. */
-function siteHeaders(): Record<string, string> {
+/** Read the path blocks of public/_headers (for example `/*` and `/data/*`) into header maps. */
+function headerBlocks(): Map<string, Record<string, string>> {
   const lines = readFileSync(new URL('./public/_headers', import.meta.url), 'utf8').split('\n')
-  const headers: Record<string, string> = {}
-  let inSiteBlock = false
+  const blocks = new Map<string, Record<string, string>>()
+  let current: Record<string, string> | null = null
   for (const line of lines) {
     if (line.trim() === '' || line.trimStart().startsWith('#')) continue
     if (!line.startsWith(' ')) {
-      inSiteBlock = line.trim() === '/*'
+      const path = line.trim()
+      current = path.startsWith('/') ? {} : null // skip host-specific blocks such as https://…
+      if (current) blocks.set(path, current)
       continue
     }
-    if (inSiteBlock) {
+    if (current) {
       const at = line.indexOf(':')
-      headers[line.slice(0, at).trim()] = line.slice(at + 1).trim()
+      current[line.slice(0, at).trim()] = line.slice(at + 1).trim()
     }
   }
-  return headers
+  return blocks
+}
+
+/** The `/*` block, served on every response, as Cloudflare does. */
+function siteHeaders(): Record<string, string> {
+  return { ...(headerBlocks().get('/*') ?? {}) }
+}
+
+/** Serve the `/data/*` block on /data/ responses in `vite preview`, as Cloudflare does. */
+function dataHeadersPlugin(): Plugin {
+  const dataHeaders = headerBlocks().get('/data/*') ?? {}
+  return {
+    name: 'within-reach-data-headers',
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.startsWith('/data/')) {
+          for (const [name, value] of Object.entries(dataHeaders)) res.setHeader(name, value)
+        }
+        next()
+      })
+    },
+  }
 }
 
 /**
@@ -40,7 +64,7 @@ function localPreviewHeaders(): Record<string, string> {
 }
 
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [svelte(), dataHeadersPlugin()],
   build: {
     // Keep everything as same-origin files; no inline scripts, so the CSP needs no 'unsafe-inline'.
     modulePreload: { polyfill: false },

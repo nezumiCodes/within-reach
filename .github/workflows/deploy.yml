@@ -91,10 +91,19 @@ jobs:
           mkdir -p app/dist/data
           for tag in "${tags[@]:0:2}"; do
             gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir /tmp/data \
-              --pattern '*.tar.gz' --pattern '*.tar.gz.sha256'
+              --pattern 'data-*.tar.gz' --pattern 'data-*.tar.gz.sha256'
             (cd /tmp/data && sha256sum -c "$tag.tar.gz.sha256")
             tar -xzf "/tmp/data/$tag.tar.gz" -C app/dist/data
           done
+          # Maps for the latest release only; the app never reads an older release's maps.
+          maps="maps-${tags[0]#data-}"
+          if gh release download "${tags[0]}" --repo "$GITHUB_REPOSITORY" --dir /tmp/data \
+              --pattern "$maps.tar.gz" --pattern "$maps.tar.gz.sha256" 2>/dev/null; then
+            (cd /tmp/data && sha256sum -c "$maps.tar.gz.sha256")
+            tar -xzf "/tmp/data/$maps.tar.gz" -C app/dist/data
+          else
+            echo "No maps for ${tags[0]}; deploying without maps."
+          fi
           latest="${tags[0]#data-}"
           previous=$([ "${#tags[@]}" -gt 1 ] && echo "\"${tags[1]#data-}\"" || echo null)
           printf '{"release": "%s", "previous": %s}\n' "$latest" "$previous" > app/dist/data/latest.json

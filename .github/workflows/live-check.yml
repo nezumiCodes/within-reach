@@ -43,6 +43,14 @@ jobs:
           done
           echo "$headers" | grep -i '^content-security-policy:' | grep -q 'upgrade-insecure-requests' || { echo "CSP missing upgrade-insecure-requests"; exit 1; }
           if echo "$headers" | grep -iq '^set-cookie:'; then echo "The site set a cookie"; exit 1; fi
+      - name: Map files are served whole and not cached
+        run: |
+          release=$(curl -fsSL "$LIVE_URL/data/latest.json" | jq -r .release)
+          part=$(curl -fsSL "$LIVE_URL/data/$release/manifest.json" | jq -r '.areas[0].map.parts[0].path // empty')
+          if [ -z "$part" ]; then echo "This release has no maps yet."; exit 0; fi
+          headers=$(curl -fsSI "$LIVE_URL/data/$release/$part")
+          echo "$headers" | head -1 | grep -q ' 200' || { echo "Map part not served: $part"; exit 1; }
+          echo "$headers" | grep -iq '^cache-control: no-store' || { echo "Map part is cacheable"; exit 1; }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
