@@ -15,3 +15,9 @@ def test_load_config_defaults() -> None:
     assert config.geocode_failure_limit == 0.02
     assert config.osrm_image.endswith(":v26.11.0-debian")
     assert (config.distance_selling_min, config.distance_selling_max) == (200, 1000)
+
+
+def test_maps_settings_load() -> None:
+    config = load_config(CONFIG)
+    assert config.map_chunk_bytes == 20 * 1024 * 1024
+    assert "@sha256:" in config.tilemaker_image
