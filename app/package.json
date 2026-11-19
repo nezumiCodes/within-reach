@@ -10,7 +10,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
     "format": "prettier --write .",
     "lint": "prettier --check .",
-    "test": "vitest run",
+    "test": "vitest run --coverage",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
@@ -19,6 +19,7 @@
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^24.19.2",
+    "@vitest/coverage-v8": "^5.1.1",
     "prettier": "^3.10.1",
     "prettier-plugin-svelte": "^4.1.1",
     "svelte": "^5.57.3",

@@ -77,5 +77,12 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',
+    // NFR-15: at least 85% line coverage of the pure engine.
+    coverage: {
+      provider: 'v8',
+      include: ['src/lib/engine/**/*.ts'],
+      exclude: ['src/lib/engine/**/*.test.ts'],
+      thresholds: { lines: 85 },
+    },
   },
 })
