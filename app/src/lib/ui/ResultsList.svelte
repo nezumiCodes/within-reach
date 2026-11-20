@@ -10,6 +10,7 @@
     total,
     selected,
     onSelect,
+    onHighlight,
     onShowMore,
   }: {
     shown: Result[]
@@ -18,6 +19,7 @@
     total: number
     selected: number | null
     onSelect: (idx: number) => void
+    onHighlight: (idx: number | null) => void
     onShowMore: () => void
   } = $props()
 
@@ -33,7 +35,13 @@
 {#if confirmed.length > 0}
   <ol class="results">
     {#each confirmed as result, i (result.pharmacy.idx)}
-      <ResultEntry {result} number={i + 1} selected={selected === result.pharmacy.idx} {onSelect} />
+      <ResultEntry
+        {result}
+        number={i + 1}
+        selected={selected === result.pharmacy.idx}
+        {onSelect}
+        {onHighlight}
+      />
     {/each}
   </ol>
 {/if}
@@ -51,6 +59,7 @@
         number={split + i + 1}
         selected={selected === result.pharmacy.idx}
         {onSelect}
+        {onHighlight}
       />
     {/each}
   </ol>

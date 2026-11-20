@@ -104,3 +104,53 @@ test('searching another area while a map loads abandons the first map', async ({
   expect(styleFetches).toHaveLength(1) // only the Welsh map was ever created
   await expect(page.locator('canvas.maplibregl-canvas')).toHaveCount(1)
 })
+
+test('hovering or focusing a list entry highlights its pin', async ({ page }) => {
+  await search(page, 'CH2 3JQ')
+  await expect(map(page)).toHaveAttribute('data-map-state', 'ready', { timeout: 20_000 })
+  const second = page.getByTestId('result').nth(1)
+  const idx = (await second.getAttribute('data-ph-idx')) ?? ''
+  await second.hover()
+  await expect(map(page)).toHaveAttribute('data-highlighted-idx', idx)
+  // Keyboard focus without the pointer resting on another entry (whichever happens last wins).
+  await page.getByRole('heading', { level: 1 }).hover()
+  await expect(map(page)).toHaveAttribute('data-highlighted-idx', '')
+  const fourth = page.getByTestId('result').nth(3)
+  await fourth.getByRole('button', { name: 'Show on map' }).focus()
+  await expect(map(page)).toHaveAttribute(
+    'data-highlighted-idx',
+    (await fourth.getAttribute('data-ph-idx')) ?? '',
+  )
+})
+
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  test('clicking a pin selects its entry and scrolls it into view', async ({ page }) => {
+    await search(page, 'CH2 3JQ')
+    await expect(map(page)).toHaveAttribute('data-map-state', 'ready', { timeout: 20_000 })
+    // Find pin 7 on screen through the map instance the panel exposes for tests.
+    const point = await page.evaluate(() => {
+      type Feature = { properties: { n: number }; geometry: { coordinates: [number, number] } }
+      const m = (
+        document.querySelector('[data-testid=map] .canvas') as unknown as {
+          maplibre: {
+            queryRenderedFeatures: (o: object) => Feature[]
+            project: (c: [number, number]) => { x: number; y: number }
+          }
+        }
+      ).maplibre
+      const pin = m.queryRenderedFeatures({ layers: ['pins'] }).find((f) => f.properties.n === 7)
+      return pin ? m.project(pin.geometry.coordinates) : null
+    })
+    expect(point).not.toBeNull()
+    const box = await map(page).locator('canvas').boundingBox()
+    await page.mouse.click(box!.x + point!.x, box!.y + point!.y)
+    const seventh = page.getByTestId('result').nth(6)
+    await expect(map(page)).toHaveAttribute(
+      'data-selected-idx',
+      (await seventh.getAttribute('data-ph-idx')) ?? '',
+    )
+    await expect(seventh).toBeInViewport()
+  })
+})

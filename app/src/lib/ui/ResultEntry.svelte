@@ -8,8 +8,14 @@
     number,
     selected,
     onSelect,
-  }: { result: Result; number: number; selected: boolean; onSelect: (idx: number) => void } =
-    $props()
+    onHighlight,
+  }: {
+    result: Result
+    number: number
+    selected: boolean
+    onSelect: (idx: number) => void
+    onHighlight: (idx: number | null) => void
+  } = $props()
   const p = $derived(result.pharmacy)
 </script>
 
@@ -20,6 +26,10 @@
   data-ph-idx={p.idx}
   data-walk-m={result.walkM ?? ''}
   data-drive-s={result.driveS ?? ''}
+  onmouseenter={() => onHighlight(p.idx)}
+  onmouseleave={() => onHighlight(null)}
+  onfocusin={() => onHighlight(p.idx)}
+  onfocusout={() => onHighlight(null)}
 >
   <span class="number" data-testid="number" aria-hidden="true">{number}</span>
   <div class="body">

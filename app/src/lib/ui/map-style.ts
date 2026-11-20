@@ -4,7 +4,8 @@ import type { StyleSpecification, VectorSourceSpecification } from 'maplibre-gl'
 import type { Result } from '../engine/results'
 
 export type PinProperties =
-  { kind: 'origin' } | { kind: 'pharmacy'; n: number; idx: number; selected: boolean }
+  | { kind: 'origin' }
+  | { kind: 'pharmacy'; n: number; idx: number; selected: boolean; highlighted: boolean }
 
 /** Copy of the base style with this area's map source and the absolute glyph URL. */
 export function buildStyle(
@@ -29,6 +30,7 @@ export function pinsGeoJson(
   shown: Result[],
   origin: { lat: number; lon: number },
   selected: number | null,
+  highlighted: number | null = null,
 ): FeatureCollection<Point, PinProperties> {
   return {
     type: 'FeatureCollection',
@@ -40,6 +42,7 @@ export function pinsGeoJson(
           n: i + 1,
           idx: r.pharmacy.idx,
           selected: r.pharmacy.idx === selected,
+          highlighted: r.pharmacy.idx === highlighted,
         }),
       ),
     ],

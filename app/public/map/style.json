@@ -156,10 +156,10 @@
       "source": "pins",
       "filter": ["==", ["get", "kind"], "pharmacy"],
       "paint": {
-        "circle-radius": ["case", ["get", "selected"], 15, 11],
+        "circle-radius": ["case", ["get", "selected"], 15, ["get", "highlighted"], 14, 11],
         "circle-color": ["case", ["get", "selected"], "#b3261e", "#00594f"],
-        "circle-stroke-color": "#ffffff",
-        "circle-stroke-width": 2
+        "circle-stroke-color": ["case", ["get", "highlighted"], "#1b1b1b", "#ffffff"],
+        "circle-stroke-width": ["case", ["get", "highlighted"], 3, 2]
       }
     },
     {

@@ -17,6 +17,7 @@
     origin,
     shown,
     selected,
+    highlighted,
     onSelect,
   }: {
     files: SessionFiles
@@ -24,6 +25,7 @@
     origin: { lat: number; lon: number }
     shown: Result[]
     selected: number | null
+    highlighted: number | null
     onSelect: (idx: number) => void
   } = $props()
 
@@ -62,7 +64,7 @@
   function draw(): void {
     if (!map) return
     const source = map.getSource('pins') as GeoJSONSource | undefined
-    source?.setData(pinsGeoJson(shown, origin, selected))
+    source?.setData(pinsGeoJson(shown, origin, selected, highlighted))
     fit()
   }
 
@@ -82,6 +84,8 @@
         return
       }
       map = created
+      // Exposed for the browser tests, which need pin positions on the canvas.
+      Object.defineProperty(container, 'maplibre', { value: created, configurable: true })
       map.on('click', 'pins', (event) => {
         const idx = event.features?.[0]?.properties?.idx
         if (typeof idx === 'number') onSelect(idx)
@@ -103,7 +107,7 @@
   })
 
   $effect(() => {
-    void [shown, origin, selected]
+    void [shown, origin, selected, highlighted]
     if (mapState === 'ready') draw()
   })
 
@@ -122,6 +126,7 @@
   data-map-state={mapState}
   data-pin-count={shown.length}
   data-selected-idx={selected ?? ''}
+  data-highlighted-idx={highlighted ?? ''}
 >
   <div class="canvas" bind:this={container}></div>
   {#if mapState === 'loading'}

@@ -3,7 +3,7 @@
    * The public search page (Phase 2 design, section 5). All state lives in memory: nothing is
    * written to the URL, history or browser storage (NFR-04).
    */
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import { DownloadError, IntegrityError, SessionFiles } from '../data/files'
   import { formatRelease, loadManifest, type Manifest } from '../data/release'
   import { Searcher, type SearchOutcome } from '../data/search'
@@ -28,6 +28,17 @@
   let filters = $state<Filters>({ ...NO_FILTERS })
   let visible = $state(PAGE)
   let selected = $state<number | null>(null)
+  let highlighted = $state<number | null>(null)
+
+  /** A pin was clicked: select its entry and bring it into view (the list may be off screen). */
+  async function selectFromMap(idx: number): Promise<void> {
+    selected = idx
+    await tick()
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+    document
+      .querySelector(`[data-testid="result"][data-ph-idx="${idx}"]`)
+      ?.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' })
+  }
 
   async function ready(): Promise<Searcher> {
     if (searcher) return searcher
@@ -110,7 +121,8 @@
                 origin={{ lat: found.lat, lon: found.lon }}
                 {shown}
                 {selected}
-                onSelect={(idx) => (selected = idx)}
+                {highlighted}
+                onSelect={selectFromMap}
               />
             {/key}
           {/if}
@@ -125,6 +137,7 @@
             total={listed.length}
             {selected}
             onSelect={(idx) => (selected = idx)}
+            onHighlight={(idx) => (highlighted = idx)}
             onShowMore={() => (visible += PAGE)}
           />
         </section>

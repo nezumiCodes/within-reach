@@ -48,18 +48,35 @@ describe('buildStyle', () => {
 })
 
 describe('pinsGeoJson', () => {
-  it('numbers pins from 1 and marks the origin and the selected pin', () => {
+  it('numbers pins from 1 and marks the origin, the selected and the highlighted pin', () => {
     const fc = pinsGeoJson(
       [result(7, -2.9, 53.2), result(3, -2.8, 53.1)],
       { lat: 53.19, lon: -2.89 },
       3,
+      7,
     )
     expect(fc.features.map((f) => f.properties)).toEqual([
       { kind: 'origin' },
-      { kind: 'pharmacy', n: 1, idx: 7, selected: false },
-      { kind: 'pharmacy', n: 2, idx: 3, selected: true },
+      { kind: 'pharmacy', n: 1, idx: 7, selected: false, highlighted: true },
+      { kind: 'pharmacy', n: 2, idx: 3, selected: true, highlighted: false },
     ])
     expect(fc.features[0].geometry).toEqual({ type: 'Point', coordinates: [-2.89, 53.19] })
     expect(fc.features[1].geometry).toEqual({ type: 'Point', coordinates: [-2.9, 53.2] })
   })
+})
+
+describe('map glyphs', () => {
+  const files = Object.keys(import.meta.glob('../../../public/map/glyphs/**/*.pbf'))
+
+  it.each(['Noto Sans Regular', 'Noto Sans Medium'])(
+    '%s covers Latin, punctuation and Welsh letters such as ẁ and ỳ',
+    (font) => {
+      const ranges = files
+        .filter((f) => f.includes(`/${font}/`))
+        .map((f) => f.split('/').pop())
+        .sort()
+      // 7680-7935 is Latin Extended Additional (Welsh ẁ ẃ ẅ ỳ): a missing range stops the map.
+      expect(ranges).toEqual(['0-255.pbf', '256-511.pbf', '7680-7935.pbf', '8192-8447.pbf'])
+    },
+  )
 })
