@@ -1,6 +1,7 @@
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fakes import make_cache
@@ -176,3 +177,19 @@ def test_build_with_maps_records_map_entry(tmp_path: Path, monkeypatch: pytest.M
         assert part["path"] == f"areas/{area['code']}/map.pmtiles"
         assert (out / part["path"]).read_bytes().startswith(b"PMTiles")
         assert area["map"]["bytes"] == 10
+
+
+def test_merge_takes_maps_setting_from_shards() -> None:
+    base: dict[str, Any] = {"directory": {"sha256": "a"}, "areas": [], "config": {"maps": "none"}}
+    shard = {"directory": {"sha256": "a"}, "areas": [], "config": {"maps": "tilemaker"}}
+    merged = merge_manifests(base, [shard, shard])
+    assert merged["config"]["maps"] == "tilemaker"
+    assert base["config"]["maps"] == "none"  # input untouched
+
+
+def test_merge_rejects_shards_that_disagree_on_maps() -> None:
+    base = {"directory": {"sha256": "a"}, "areas": [], "config": {"maps": "none"}}
+    with_maps = {"directory": {"sha256": "a"}, "areas": [], "config": {"maps": "tilemaker"}}
+    without = {"directory": {"sha256": "a"}, "areas": [], "config": {"maps": "none"}}
+    with pytest.raises(ValueError, match="maps"):
+        merge_manifests(base, [with_maps, without])
