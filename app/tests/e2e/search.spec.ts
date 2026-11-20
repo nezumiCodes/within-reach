@@ -15,7 +15,7 @@ const PC = {
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
 async function search(page: Page, postcode: string): Promise<void> {
-  await page.getByLabel('Postcode').fill(postcode)
+  await page.getByLabel('Postcode', { exact: true }).fill(postcode)
   await page.getByRole('button', { name: 'Search' }).click()
 }
 
@@ -148,7 +148,7 @@ test('the search leaves no trace', async ({ page, context }) => {
 
 test('keyboard only: search, sort, filter, open hours, show more', async ({ page }) => {
   await page.keyboard.press('Tab') // skip link or first focusable
-  await page.getByLabel('Postcode').focus()
+  await page.getByLabel('Postcode', { exact: true }).focus()
   await page.keyboard.type(PC.chester)
   await page.keyboard.press('Enter')
   await expect(results(page)).toHaveCount(10)

@@ -1,0 +1,180 @@
+{
+  "version": 8,
+  "name": "Within Reach area map",
+  "glyphs": "/map/glyphs/{fontstack}/{range}.pbf",
+  "sources": {
+    "area": {
+      "type": "vector",
+      "url": "pmtiles://area",
+      "attribution": "© OpenStreetMap contributors"
+    },
+    "pins": {
+      "type": "geojson",
+      "data": { "type": "FeatureCollection", "features": [] }
+    }
+  },
+  "layers": [
+    { "id": "background", "type": "background", "paint": { "background-color": "#f2efe9" } },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "area",
+      "source-layer": "water",
+      "paint": { "fill-color": "#b5d0e6" }
+    },
+    {
+      "id": "waterway",
+      "type": "line",
+      "source": "area",
+      "source-layer": "waterway",
+      "paint": {
+        "line-color": "#b5d0e6",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.5, 14, 2]
+      }
+    },
+    {
+      "id": "road-minor",
+      "type": "line",
+      "source": "area",
+      "source-layer": "transportation",
+      "minzoom": 12,
+      "filter": ["in", ["get", "class"], ["literal", ["minor", "service", "track"]]],
+      "layout": { "line-cap": "round", "line-join": "round" },
+      "paint": {
+        "line-color": "#ffffff",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.5, 16, 6]
+      }
+    },
+    {
+      "id": "path",
+      "type": "line",
+      "source": "area",
+      "source-layer": "transportation",
+      "minzoom": 13,
+      "filter": ["==", ["get", "class"], "path"],
+      "paint": { "line-color": "#a39e93", "line-width": 1, "line-dasharray": [2, 1.5] }
+    },
+    {
+      "id": "rail",
+      "type": "line",
+      "source": "area",
+      "source-layer": "transportation",
+      "filter": ["==", ["get", "class"], "rail"],
+      "paint": { "line-color": "#8c8a86", "line-width": 1.2, "line-dasharray": [3, 2] }
+    },
+    {
+      "id": "road-main-casing",
+      "type": "line",
+      "source": "area",
+      "source-layer": "transportation",
+      "filter": [
+        "in",
+        ["get", "class"],
+        ["literal", ["motorway", "trunk", "primary", "secondary", "tertiary"]]
+      ],
+      "layout": { "line-cap": "round", "line-join": "round" },
+      "paint": {
+        "line-color": "#c9c3b6",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1, 16, 12]
+      }
+    },
+    {
+      "id": "road-main",
+      "type": "line",
+      "source": "area",
+      "source-layer": "transportation",
+      "filter": [
+        "in",
+        ["get", "class"],
+        ["literal", ["motorway", "trunk", "primary", "secondary", "tertiary"]]
+      ],
+      "layout": { "line-cap": "round", "line-join": "round" },
+      "paint": {
+        "line-color": [
+          "match",
+          ["get", "class"],
+          ["motorway", "trunk"],
+          "#f7c98b",
+          "primary",
+          "#fde3a7",
+          "#ffffff"
+        ],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.5, 16, 9]
+      }
+    },
+    {
+      "id": "road-name",
+      "type": "symbol",
+      "source": "area",
+      "source-layer": "transportation_name",
+      "minzoom": 13,
+      "layout": {
+        "symbol-placement": "line",
+        "text-field": ["coalesce", ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 11
+      },
+      "paint": { "text-color": "#4a4a4a", "text-halo-color": "#ffffff", "text-halo-width": 1.5 }
+    },
+    {
+      "id": "place",
+      "type": "symbol",
+      "source": "area",
+      "source-layer": "place",
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans Medium"],
+        "text-size": [
+          "match",
+          ["get", "class"],
+          "city",
+          16,
+          "town",
+          14,
+          ["village", "suburb"],
+          12,
+          11
+        ]
+      },
+      "paint": { "text-color": "#333333", "text-halo-color": "#ffffff", "text-halo-width": 1.5 }
+    },
+    {
+      "id": "origin",
+      "type": "circle",
+      "source": "pins",
+      "filter": ["==", ["get", "kind"], "origin"],
+      "paint": {
+        "circle-radius": 8,
+        "circle-color": "#1d2a6b",
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 4
+      }
+    },
+    {
+      "id": "pins",
+      "type": "circle",
+      "source": "pins",
+      "filter": ["==", ["get", "kind"], "pharmacy"],
+      "paint": {
+        "circle-radius": ["case", ["get", "selected"], 15, 11],
+        "circle-color": ["case", ["get", "selected"], "#b3261e", "#00594f"],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2
+      }
+    },
+    {
+      "id": "pin-numbers",
+      "type": "symbol",
+      "source": "pins",
+      "filter": ["==", ["get", "kind"], "pharmacy"],
+      "layout": {
+        "text-field": ["to-string", ["get", "n"]],
+        "text-font": ["Noto Sans Medium"],
+        "text-size": 12,
+        "text-allow-overlap": true,
+        "text-ignore-placement": true
+      },
+      "paint": { "text-color": "#ffffff" }
+    }
+  ]
+}

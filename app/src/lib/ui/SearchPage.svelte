@@ -10,6 +10,7 @@
   import { NO_FILTERS, type Filters } from '../engine/hours'
   import { groupByFilters, hiddenSummary, sortResults, type SortMode } from '../engine/results'
   import Controls from './Controls.svelte'
+  import MapPanel from './MapPanel.svelte'
   import Messages from './Messages.svelte'
   import ResultsList from './ResultsList.svelte'
   import SearchForm from './SearchForm.svelte'
@@ -100,7 +101,20 @@
 
     {#if found}
       <div class="results-layout">
-        <section class="map-column" aria-label="Map"></section>
+        <section class="map-column" aria-label="Map">
+          {#if files}
+            {#key found.area.code}
+              <MapPanel
+                {files}
+                area={found.area}
+                origin={{ lat: found.lat, lon: found.lon }}
+                {shown}
+                {selected}
+                onSelect={(idx) => (selected = idx)}
+              />
+            {/key}
+          {/if}
+        </section>
         <section class="list-column" aria-labelledby="results-heading">
           <h2 id="results-heading">Pharmacies near {found.postcode}</h2>
           <Controls bind:mode bind:filters />
