@@ -29,7 +29,12 @@ function siteHeaders(): Record<string, string> {
   return { ...(headerBlocks().get('/*') ?? {}) }
 }
 
-/** Serve the `/data/*` block on /data/ responses in `vite preview`, as Cloudflare does. */
+/**
+ * Serve /data/ files in `vite preview` the way Cloudflare Pages does: with the `/data/*` headers,
+ * and `.gz` files as plain `application/gzip` bytes. The preview server would otherwise label them
+ * `Content-Encoding: gzip`, the browser would unzip them in transit, and the app's checksum check
+ * (rightly) rejects them. A host that does that in production fails loudly in the same way.
+ */
 function dataHeadersPlugin(): Plugin {
   const dataHeaders = headerBlocks().get('/data/*') ?? {}
   return {
@@ -38,6 +43,14 @@ function dataHeadersPlugin(): Plugin {
       server.middlewares.use((req, res, next) => {
         if (req.url?.startsWith('/data/')) {
           for (const [name, value] of Object.entries(dataHeaders)) res.setHeader(name, value)
+          if (req.url.split('?')[0].endsWith('.gz')) {
+            const setHeader = res.setHeader.bind(res)
+            res.setHeader = (name, value) => {
+              const lower = name.toLowerCase()
+              if (lower === 'content-encoding') return res
+              return setHeader(name, lower === 'content-type' ? 'application/gzip' : value)
+            }
+          }
         }
         next()
       })

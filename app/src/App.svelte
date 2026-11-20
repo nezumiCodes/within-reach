@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Placeholder from './lib/ui/Placeholder.svelte'
+  import SearchPage from './lib/ui/SearchPage.svelte'
 </script>
 
-<Placeholder />
+<SearchPage />
