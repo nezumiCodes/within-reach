@@ -95,14 +95,18 @@ jobs:
             (cd /tmp/data && sha256sum -c "$tag.tar.gz.sha256")
             tar -xzf "/tmp/data/$tag.tar.gz" -C app/dist/data
           done
-          # Maps for the latest release only; the app never reads an older release's maps.
+          # Maps for the latest release only (tags[0] is the release latest.json names below);
+          # the app never reads an older release's maps. Releases before maps existed have no
+          # maps asset; any other download failure stops the deploy.
           maps="maps-${tags[0]#data-}"
-          if gh release download "${tags[0]}" --repo "$GITHUB_REPOSITORY" --dir /tmp/data \
-              --pattern "$maps.tar.gz" --pattern "$maps.tar.gz.sha256" 2>/dev/null; then
+          if gh release view "${tags[0]}" --repo "$GITHUB_REPOSITORY" --json assets \
+              --jq '.assets[].name' | grep -qx "$maps.tar.gz"; then
+            gh release download "${tags[0]}" --repo "$GITHUB_REPOSITORY" --dir /tmp/data \
+              --pattern "$maps.tar.gz" --pattern "$maps.tar.gz.sha256"
             (cd /tmp/data && sha256sum -c "$maps.tar.gz.sha256")
             tar -xzf "/tmp/data/$maps.tar.gz" -C app/dist/data
           else
-            echo "No maps for ${tags[0]}; deploying without maps."
+            echo "No maps asset for ${tags[0]}; deploying without maps."
           fi
           latest="${tags[0]#data-}"
           previous=$([ "${#tags[@]}" -gt 1 ] && echo "\"${tags[1]#data-}\"" || echo null)
