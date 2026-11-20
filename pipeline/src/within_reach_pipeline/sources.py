@@ -10,6 +10,8 @@ PHS_CKAN = "https://www.opendata.nhs.scot/api/3/action/package_show"
 ARCGIS_SEARCH = "https://www.arcgis.com/sharing/rest/search"
 ARCGIS_ITEM_DATA = "https://www.arcgis.com/sharing/rest/content/items/{id}/data"
 OSM_UK_URL = "https://download.geofabrik.de/europe/united-kingdom-latest.osm.pbf"
+# Sea areas for the map files (OSM coastline processed by osmdata.openstreetmap.de, ODbL).
+WATER_POLYGONS_URL = "https://osmdata.openstreetmap.de/download/water-polygons-split-4326.zip"
 
 
 @dataclass(frozen=True)

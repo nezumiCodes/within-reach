@@ -1,6 +1,7 @@
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fakes import make_cache
@@ -125,3 +126,70 @@ def test_manifest_counts_postcodes_without_walking_route(tmp_path: Path) -> None
 def test_area_entry_has_no_walk_count(tmp_path: Path) -> None:
     manifest = _build(make_cache(tmp_path), tmp_path / "out", "ALL")
     assert all(a["postcodes_without_walk"] == 0 for a in manifest["areas"])
+
+
+def test_build_without_maps_has_no_map_entries(tmp_path: Path) -> None:
+    manifest = _build(make_cache(tmp_path), tmp_path / "out", "ALL")
+    assert manifest["config"]["maps"] == "none"
+    assert all("map" not in area for area in manifest["areas"])
+
+
+def test_build_with_maps_records_map_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from within_reach_pipeline import build
+
+    calls: list[Path] = []
+
+    def fake_extract(stack: object, cache: Path, points: object) -> Path:
+        return tmp_path / "area.osm.pbf"
+
+    def fake_map(
+        image: str, pbf: Path, points: object, config_file: Path, coastline: Path, dest: Path
+    ) -> None:
+        calls.append(pbf)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"PMTiles\x03" + b"\0" * 2)
+
+    monkeypatch.setattr(build, "_area_extract", fake_extract)
+    monkeypatch.setattr(build, "build_area_map", fake_map)
+    cache = make_cache(tmp_path)
+    out = tmp_path / "out"
+    argv = [
+        "build",
+        "--cache",
+        str(cache),
+        "--release",
+        "2026-11",
+        "--out",
+        str(out),
+        "--router",
+        "fake",
+        "--built-at",
+        BUILT_AT,
+        "--maps",
+        "tilemaker",
+    ]
+    assert cli.run(argv) == 0
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert manifest["config"]["maps"] == "tilemaker"
+    assert calls == [tmp_path / "area.osm.pbf"] * len(manifest["areas"])
+    for area in manifest["areas"]:
+        part = area["map"]["parts"][0]
+        assert part["path"] == f"areas/{area['code']}/map.pmtiles"
+        assert (out / part["path"]).read_bytes().startswith(b"PMTiles")
+        assert area["map"]["bytes"] == 10
+
+
+def test_merge_takes_maps_setting_from_shards() -> None:
+    base: dict[str, Any] = {"directory": {"sha256": "a"}, "areas": [], "config": {"maps": "none"}}
+    shard = {"directory": {"sha256": "a"}, "areas": [], "config": {"maps": "tilemaker"}}
+    merged = merge_manifests(base, [shard, shard])
+    assert merged["config"]["maps"] == "tilemaker"
+    assert base["config"]["maps"] == "none"  # input untouched
+
+
+def test_merge_rejects_shards_that_disagree_on_maps() -> None:
+    base = {"directory": {"sha256": "a"}, "areas": [], "config": {"maps": "none"}}
+    with_maps = {"directory": {"sha256": "a"}, "areas": [], "config": {"maps": "tilemaker"}}
+    without = {"directory": {"sha256": "a"}, "areas": [], "config": {"maps": "none"}}
+    with pytest.raises(ValueError, match="maps"):
+        merge_manifests(base, [with_maps, without])

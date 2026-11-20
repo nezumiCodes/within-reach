@@ -1,24 +1,61 @@
 import { readFileSync } from 'node:fs'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
+import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
 
-/** Read the `/*` block of public/_headers so `vite preview` serves the same headers as Cloudflare. */
-function siteHeaders(): Record<string, string> {
+/** Read the path blocks of public/_headers (for example `/*` and `/data/*`) into header maps. */
+function headerBlocks(): Map<string, Record<string, string>> {
   const lines = readFileSync(new URL('./public/_headers', import.meta.url), 'utf8').split('\n')
-  const headers: Record<string, string> = {}
-  let inSiteBlock = false
+  const blocks = new Map<string, Record<string, string>>()
+  let current: Record<string, string> | null = null
   for (const line of lines) {
     if (line.trim() === '' || line.trimStart().startsWith('#')) continue
     if (!line.startsWith(' ')) {
-      inSiteBlock = line.trim() === '/*'
+      const path = line.trim()
+      current = path.startsWith('/') ? {} : null // skip host-specific blocks such as https://…
+      if (current) blocks.set(path, current)
       continue
     }
-    if (inSiteBlock) {
+    if (current) {
       const at = line.indexOf(':')
-      headers[line.slice(0, at).trim()] = line.slice(at + 1).trim()
+      current[line.slice(0, at).trim()] = line.slice(at + 1).trim()
     }
   }
-  return headers
+  return blocks
+}
+
+/** The `/*` block, served on every response, as Cloudflare does. */
+function siteHeaders(): Record<string, string> {
+  return { ...(headerBlocks().get('/*') ?? {}) }
+}
+
+/**
+ * Serve /data/ files in `vite preview` the way Cloudflare Pages does: with the `/data/*` headers,
+ * and `.gz` files as plain `application/gzip` bytes. The preview server would otherwise label them
+ * `Content-Encoding: gzip`, the browser would unzip them in transit, and the app's checksum check
+ * (rightly) rejects them. A host that does that in production fails loudly in the same way.
+ */
+function dataHeadersPlugin(): Plugin {
+  const dataHeaders = headerBlocks().get('/data/*') ?? {}
+  return {
+    name: 'within-reach-data-headers',
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.startsWith('/data/')) {
+          for (const [name, value] of Object.entries(dataHeaders)) res.setHeader(name, value)
+          if (req.url.split('?')[0].endsWith('.gz')) {
+            const setHeader = res.setHeader.bind(res)
+            res.setHeader = (name, value) => {
+              const lower = name.toLowerCase()
+              if (lower === 'content-encoding') return res
+              return setHeader(name, lower === 'content-type' ? 'application/gzip' : value)
+            }
+          }
+        }
+        next()
+      })
+    },
+  }
 }
 
 /**
@@ -40,7 +77,7 @@ function localPreviewHeaders(): Record<string, string> {
 }
 
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [svelte(), dataHeadersPlugin()],
   build: {
     // Keep everything as same-origin files; no inline scripts, so the CSP needs no 'unsafe-inline'.
     modulePreload: { polyfill: false },
@@ -53,5 +90,12 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',
+    // NFR-15: at least 85% line coverage of the pure engine.
+    coverage: {
+      provider: 'v8',
+      include: ['src/lib/engine/**/*.ts'],
+      exclude: ['src/lib/engine/**/*.test.ts'],
+      thresholds: { lines: 85 },
+    },
   },
 })

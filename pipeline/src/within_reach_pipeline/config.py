@@ -19,6 +19,8 @@ class PipelineConfig:
     user_agent: str
     distance_selling_min: int
     distance_selling_max: int
+    tilemaker_image: str
+    map_chunk_bytes: int
 
 
 def load_config(path: Path = DEFAULT_CONFIG) -> PipelineConfig:
@@ -35,4 +37,6 @@ def load_config(path: Path = DEFAULT_CONFIG) -> PipelineConfig:
         user_agent=str(data["http"]["user_agent"]),
         distance_selling_min=int(release["distance_selling_min"]),
         distance_selling_max=int(release["distance_selling_max"]),
+        tilemaker_image=str(data["maps"]["tilemaker_image"]),
+        map_chunk_bytes=int(data["maps"]["chunk_bytes"]),
     )

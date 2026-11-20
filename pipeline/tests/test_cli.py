@@ -1,9 +1,10 @@
 import contextlib
+import hashlib
 import json
 import logging
 from pathlib import Path
 
-from fakes import FIXTURES, FakeFetcher, onspd_zip_bytes
+from fakes import FIXTURES, FakeFetcher, onspd_zip_bytes, water_zip_bytes
 
 from within_reach_pipeline import cli
 from within_reach_pipeline.pharmacies.wales import load_ods_wales
@@ -17,6 +18,7 @@ def test_cli_fetch_writes_cache(tmp_path: Path) -> None:
             "contractor_details": b"contractor",
             "dispenser_contactdetails": b"phs",
             "geofabrik": b"pbf",
+            "osmdata.openstreetmap.de": water_zip_bytes(tmp_path),
         }
     )
     cache = tmp_path / "cache"
@@ -24,7 +26,15 @@ def test_cli_fetch_writes_cache(tmp_path: Path) -> None:
 
     sources = json.loads((cache / "sources.json").read_text())
     names = [s["name"] for s in sources]
-    assert names == ["onspd", "nhsbsa", "contractor_details", "phs", "osm", "ods_wales"]
+    assert names == [
+        "onspd",
+        "nhsbsa",
+        "contractor_details",
+        "phs",
+        "osm",
+        "water_polygons",
+        "ods_wales",
+    ]
     assert all(set(s) == {"name", "label", "url", "sha256"} for s in sources)
     for filename in ["nhsbsa.csv", "contractor_details.csv", "phs.csv", "uk.osm.pbf"]:
         assert (cache / filename).exists()
@@ -54,3 +64,30 @@ def test_http_request_logging_is_quiet(tmp_path: Path) -> None:
     with contextlib.suppress(FileNotFoundError):  # only the logging setup matters here
         cli.run(["check", "--release-dir", str(tmp_path / "missing")])
     assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
+
+
+def test_fetch_downloads_water_polygons(tmp_path: Path) -> None:
+    body = water_zip_bytes(tmp_path)
+    fetcher = FakeFetcher(
+        downloads={
+            "arcgis.com/sharing/rest/content/items": onspd_zip_bytes(tmp_path),
+            "consol_pharmacy_list": (FIXTURES / "nhsbsa_sample.csv").read_bytes(),
+            "contractor_details": b"contractor",
+            "dispenser_contactdetails": b"phs",
+            "geofabrik": b"pbf",
+            "osmdata.openstreetmap.de": body,
+        }
+    )
+    cache = tmp_path / "cache"
+    assert cli.run(["fetch", "--cache", str(cache)], fetcher=fetcher) == 0
+
+    coastline = cache / "coastline"
+    assert sorted(p.name for p in coastline.iterdir()) == [
+        f"water_polygons.{ext}" for ext in ("cpg", "dbf", "prj", "shp", "shx")
+    ]
+    assert not (cache / "water_polygons.zip").exists()
+    water = next(
+        s for s in json.loads((cache / "sources.json").read_text()) if s["name"] == "water_polygons"
+    )
+    assert water["url"] == "https://osmdata.openstreetmap.de/download/water-polygons-split-4326.zip"
+    assert water["sha256"] == hashlib.sha256(body).hexdigest()

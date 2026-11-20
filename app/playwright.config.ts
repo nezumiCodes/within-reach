@@ -22,7 +22,8 @@ export default defineConfig({
   webServer: liveUrl
     ? undefined
     : {
-        command: 'npm run build && npm run preview -- --port 4173 --strictPort',
+        command:
+          'npm run build && node scripts/copy-fixture.mjs && npm run preview -- --port 4173 --strictPort',
         url: baseURL,
         reuseExistingServer: !process.env.CI,
       },

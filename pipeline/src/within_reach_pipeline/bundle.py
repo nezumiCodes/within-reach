@@ -146,6 +146,12 @@ def merge_manifests(base: dict[str, Any], shards: Sequence[dict[str, Any]]) -> d
             raise ValueError("shard was built from a different pharmacy directory")
         areas.extend(shard["areas"])
     merged["areas"] = sorted(areas, key=lambda a: a["code"])
+    # The base manifest is built without areas, so whether maps were built comes from the shards.
+    maps = {shard.get("config", {}).get("maps") for shard in shards} - {None}
+    if len(maps) > 1:
+        raise ValueError(f"shards disagree on maps: {sorted(maps)}")
+    if maps and "config" in base:
+        merged["config"] = {**base["config"], "maps": maps.pop()}
     if "all_area_codes" in base:
         merged["complete"] = [a["code"] for a in merged["areas"]] == base["all_area_codes"]
     return merged

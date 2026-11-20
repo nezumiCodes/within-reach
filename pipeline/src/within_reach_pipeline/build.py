@@ -19,40 +19,39 @@ from within_reach_pipeline.bundle import (
 from within_reach_pipeline.candidates import select_candidates
 from within_reach_pipeline.config import PipelineConfig
 from within_reach_pipeline.http import HttpxFetcher
-from within_reach_pipeline.models import Pharmacy, Postcode
+from within_reach_pipeline.maps import MAP_CONFIG, build_area_map, write_map_entry
+from within_reach_pipeline.models import Postcode
 from within_reach_pipeline.onspd import read_area_names, read_onspd
 from within_reach_pipeline.pharmacies import build_directory
 from within_reach_pipeline.pharmacies.england import read_distance_selling_codes, read_nhsbsa
 from within_reach_pipeline.pharmacies.scotland import read_phs
 from within_reach_pipeline.pharmacies.wales import load_ods_wales
-from within_reach_pipeline.routing import Router, TravelRow, route_candidates
+from within_reach_pipeline.routing import LatLon, Router, TravelRow, route_candidates
 from within_reach_pipeline.routing.fake import FakeRouter
 
 log = logging.getLogger(__name__)
 RouterKind = Literal["osrm", "fake"]
+MapsKind = Literal["tilemaker", "none"]
 WALK_SPEED_M_S, DRIVE_SPEED_M_S = 1.4, 13.4  # fake router only
 
 
+def _area_extract(stack: ExitStack, cache: Path, points: Sequence[LatLon]) -> Path:
+    """The area's part of the GB map, used for routing and for the area map file."""
+    from within_reach_pipeline.routing.osrm import area_bbox, clip_extract
+
+    work = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="within-reach-")))
+    return clip_extract(cache / "uk.osm.pbf", area_bbox(points), work / "area.osm.pbf")
+
+
 def _routers(
-    kind: RouterKind,
-    stack: ExitStack,
-    cache: Path,
-    postcodes: Sequence[Postcode],
-    pharmacies: Sequence[Pharmacy],
-    config: PipelineConfig,
+    kind: RouterKind, stack: ExitStack, pbf: Path | None, config: PipelineConfig
 ) -> tuple[Router, Router]:
     if kind == "fake":
         return FakeRouter(WALK_SPEED_M_S), FakeRouter(DRIVE_SPEED_M_S)
-    from within_reach_pipeline.routing.osrm import (
-        OsrmRouter,
-        area_bbox,
-        clip_extract,
-        osrm_server,
-    )
+    from within_reach_pipeline.routing.osrm import OsrmRouter, osrm_server
 
-    points = [(p.lat, p.lon) for p in postcodes] + [(p.lat, p.lon) for p in pharmacies]
-    work = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="within-reach-")))
-    pbf = clip_extract(cache / "uk.osm.pbf", area_bbox(points), work / "area.osm.pbf")
+    if pbf is None:
+        raise ValueError("the OSRM router needs an area extract")
     fetcher = HttpxFetcher(config.user_agent, timeout_s=300)
     walk_url = stack.enter_context(osrm_server(pbf, "foot", config.osrm_image, 5101))
     drive_url = stack.enter_context(osrm_server(pbf, "car", config.osrm_image, 5102))
@@ -75,8 +74,10 @@ def build_release(
     router: RouterKind,
     config: PipelineConfig,
     built_at: str,
+    maps: MapsKind = "none",
 ) -> dict[str, Any]:
     from within_reach_pipeline.cli import (
+        COASTLINE_DIR,
         CONTRACTOR_DETAILS_FILE,
         NHSBSA_FILE,
         ODS_WALES_FILE,
@@ -123,11 +124,26 @@ def build_release(
             config.min_candidates,
         )
         used = sorted({c.ph_idx for row in candidates for c in row})
+        points = [(p.lat, p.lon) for p in area_postcodes]
+        points += [(pharmacies[i].lat, pharmacies[i].lon) for i in used]
+        map_entry: dict[str, Any] | None = None
         with ExitStack() as stack:
-            walk, drive = _routers(
-                router, stack, cache, area_postcodes, [pharmacies[i] for i in used], config
-            )
+            needs_extract = router == "osrm" or maps == "tilemaker"
+            pbf = _area_extract(stack, cache, points) if needs_extract else None
+            walk, drive = _routers(router, stack, pbf, config)
             rows = route_candidates(area_postcodes, pharmacies, candidates, walk, drive)
+            if maps == "tilemaker" and pbf is not None:
+                built = pbf.parent / "map.pmtiles"
+                log.info("area %s: building map", code)
+                build_area_map(
+                    config.tilemaker_image,
+                    pbf,
+                    points,
+                    MAP_CONFIG,
+                    cache / COASTLINE_DIR,
+                    built,
+                )
+                map_entry = write_map_entry(out, code, built, config.map_chunk_bytes)
         postcode_info, travel_info = write_area(out, code, area_postcodes, rows)
         area_entries.append(
             {
@@ -138,6 +154,7 @@ def build_release(
                 "pairs": len(rows),
                 "postcodes_without_walk": postcodes_without_walk(rows),
                 "files": {"postcodes": postcode_info.as_dict(), "travel": travel_info.as_dict()},
+                **({"map": map_entry} if map_entry is not None else {}),
             }
         )
 
@@ -155,6 +172,7 @@ def build_release(
             "min_candidates": config.min_candidates,
             "osrm_version": config.osrm_image.rsplit(":", 1)[-1],
             "router": router,
+            "maps": maps,
         },
         "attribution": ATTRIBUTION,
         "directory": {**directory_info.as_dict(), "count_by_nation": count_by_nation},

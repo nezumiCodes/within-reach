@@ -3,6 +3,10 @@
   --muted: #4a4a4a;
   --bg: #ffffff;
   --link: #005ea5;
+  --accent: #00594f;
+  --on-accent: #ffffff;
+  --rule: #d0d0d0;
+  --highlight: #fff4c2;
   font-family:
     system-ui,
     -apple-system,
@@ -20,6 +24,10 @@
     --muted: #c4c4c4;
     --bg: #121212;
     --link: #8cc4ff;
+    --accent: #5fd3c2;
+    --on-accent: #0b1f1c;
+    --rule: #3a3a3a;
+    --highlight: #3a3415;
   }
 }
 
@@ -34,4 +42,16 @@ a {
 :focus-visible {
   outline: 3px solid var(--link);
   outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }

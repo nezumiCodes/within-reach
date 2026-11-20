@@ -1,0 +1,141 @@
+{
+ "all_area_codes": [
+  "E06000050",
+  "W11000023"
+ ],
+ "areas": [
+  {
+   "code": "E06000050",
+   "files": {
+    "postcodes": {
+     "bytes": 15643,
+     "path": "areas/E06000050/postcodes.csv.gz",
+     "sha256": "15bfe1209fee5651c4eed7da1fdc1d5a4c1aac797f3f5f78f828062231fb78e3"
+    },
+    "travel": {
+     "bytes": 201723,
+     "path": "areas/E06000050/travel.csv.gz",
+     "sha256": "c1419c3d92d2dad36593eb487321f04ce64c5e4ab39a59d1bd0e73713da61ec1"
+    }
+   },
+   "map": {
+    "bytes": 1748358,
+    "parts": [
+     {
+      "bytes": 874179,
+      "path": "areas/E06000050/map.pmtiles.000",
+      "sha256": "c43e612267659c300ddd559fed6c2443586b00aa6d1813223784e6c7f9a31e98"
+     },
+     {
+      "bytes": 874179,
+      "path": "areas/E06000050/map.pmtiles.001",
+      "sha256": "ca718e4ddc80b4d84e82a33959d3e47648bd328026dece70d686161108bed6e0"
+     }
+    ],
+    "sha256": "b2be7c77778bb69e90496ae84e687c79fff8d60c2adbc2496fbf46ce22a8d69f"
+   },
+   "name": "Cheshire West and Chester",
+   "nation": "England",
+   "pairs": 19513,
+   "postcodes": 1335,
+   "postcodes_without_walk": 58
+  },
+  {
+   "code": "W11000023",
+   "files": {
+    "postcodes": {
+     "bytes": 20405,
+     "path": "areas/W11000023/postcodes.csv.gz",
+     "sha256": "6d8dd9759054efac2fc5faf6a5fe35c3b04b2709081f96c31015f05eab0ea9e4"
+    },
+    "travel": {
+     "bytes": 233449,
+     "path": "areas/W11000023/travel.csv.gz",
+     "sha256": "fe4cb6f2e6a1bd5cf82fdcefe9bb285cc1236172a01f88ab0972458e81a39ef2"
+    }
+   },
+   "map": {
+    "bytes": 1883028,
+    "parts": [
+     {
+      "bytes": 1883028,
+      "path": "areas/W11000023/map.pmtiles",
+      "sha256": "e3a0485feb76f50de40b8cab39427a004d4dee089a45223d21646e466ac943ee"
+     }
+    ],
+    "sha256": "e3a0485feb76f50de40b8cab39427a004d4dee089a45223d21646e466ac943ee"
+   },
+   "name": "Betsi Cadwaladr University Health Board",
+   "nation": "Wales",
+   "pairs": 22559,
+   "postcodes": 1735,
+   "postcodes_without_walk": 0
+  }
+ ],
+ "attribution": [
+  "Contains public sector information licensed under the Open Government Licence v3.0 (ONS Postcode Directory, NHSBSA, Public Health Scotland, NHS ODS).",
+  "Contains OS data © Crown copyright and database right.",
+  "Travel distances and times derived from map data © OpenStreetMap contributors, available under the Open Database Licence (ODbL)."
+ ],
+ "built_at": "2026-11-18T18:34:00Z",
+ "complete": true,
+ "config": {
+  "maps": "tilemaker",
+  "max_candidates": 40,
+  "min_candidates": 5,
+  "osrm_version": "v26.11.0-debian",
+  "radius_m": 5000,
+  "router": "osrm"
+ },
+ "directory": {
+  "bytes": 3423,
+  "count_by_nation": {
+   "England": 35,
+   "Scotland": 0,
+   "Wales": 38
+  },
+  "path": "pharmacies.csv.gz",
+  "sha256": "0045866764227f71bc5406dc384ba47340a1483de923be2a716f6e68eaf4a84b"
+ },
+ "districts": {
+  "bytes": 75,
+  "path": "districts.csv.gz",
+  "sha256": "6cf5c167d64b815916015db025fc6722dcb0444c4550e99997a8e4a7ed2f17cf"
+ },
+ "excluded_distance_selling": 471,
+ "geocode_failures": [],
+ "hours_warnings": 11,
+ "release": "2026-11",
+ "sources": {
+  "contractor_details": {
+   "label": "CONTRACTOR_DETAILS_202610",
+   "sha256": "06e5f0229cdc1f8e78cc1fd32cc15d3b59a5732a09d7b4eb9816f4c61c9b3b9d",
+   "url": "https://opendata.nhsbsa.net/dataset/d5954d7e-63cd-43d4-aa7e-4a489119f6a7/resource/40eed8f1-87fa-4333-9f41-8d4e7bda438b/download/contractor_details_202610.csv"
+  },
+  "nhsbsa": {
+   "label": "CONSOL_PHARMACY_LIST_202627Q2",
+   "sha256": "ebf670f784dbec703ce99d98714f8314789057e0a72b8ae628fb06d7bdcdae15",
+   "url": "https://opendata.nhsbsa.net/dataset/240d142d-df82-4e97-b051-12371519e4e1/resource/33da902b-b951-4a86-a0ee-5eb8e2139e49/download/consol_pharmacy_list_202627q2.csv"
+  },
+  "ods_wales": {
+   "label": "NHS ODS ORD API, active pharmacies in Wales (RO182), fetched 2026-11-18T17:15:19Z",
+   "sha256": "87fd22f487b4f145154d3c05b8df4f9ff6abd0a609aa6a4219e7def494032341",
+   "url": "https://directory.spineservices.nhs.uk/ORD/2-0-0/organisations"
+  },
+  "onspd": {
+   "label": "ONS Postcode Directory (August 2026)",
+   "sha256": "ab51f1e82bd5beeb1089c3732ea6e11d62eb5693d619e2c4f4dd8c4baaa69293",
+   "url": "https://www.arcgis.com/sharing/rest/content/items/9e5a92a3cfb14dc7ad43d6ea7a7b8c7f/data"
+  },
+  "osm": {
+   "label": "Geofabrik united-kingdom-latest",
+   "sha256": "ed835aee0b8b943b3bc79d919263c33bafac353215e3ff69be6d01d7814b0be2",
+   "url": "https://download.geofabrik.de/europe/united-kingdom-latest.osm.pbf"
+  },
+  "phs": {
+   "label": "Dispenser Details - August 2026",
+   "sha256": "4415eb8cd5cbeca5668730c5892042a90dd01a2941dfb59ef989a45389eb29cf",
+   "url": "https://www.opendata.nhs.scot/dataset/a30fde16-1226-49b3-b13d-eb90e39c2058/resource/da1053b6-f02c-4010-9226-964151f1d2ee/download/dispenser_contactdetails_202608.csv"
+  }
+ }
+}

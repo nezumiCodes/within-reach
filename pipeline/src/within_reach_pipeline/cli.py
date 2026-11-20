@@ -20,6 +20,7 @@ from within_reach_pipeline.pharmacies.england import read_nhsbsa
 from within_reach_pipeline.pharmacies.wales import fetch_ods_wales, postcode_area, save_ods_wales
 from within_reach_pipeline.sources import (
     OSM_UK_URL,
+    WATER_POLYGONS_URL,
     SourceRelease,
     latest_contractor_details,
     latest_nhsbsa,
@@ -36,6 +37,8 @@ PHS_FILE = "phs.csv"
 OSM_FILE = "uk.osm.pbf"
 ODS_WALES_FILE = "ods_wales.json"
 ONSPD_DIR = "onspd"
+COASTLINE_DIR = "coastline"
+SHAPEFILE_PARTS = (".shp", ".shx", ".dbf", ".prj", ".cpg")
 
 
 def onspd_csv(cache: Path) -> Path:
@@ -55,6 +58,18 @@ def _extract_onspd(zip_path: Path, dest: Path) -> None:
             )
             if keep and ".." not in Path(member).parts:
                 archive.extract(member, dest)
+
+
+def _extract_coastline(zip_path: Path, dest: Path) -> None:
+    """Keep only the shapefile parts, flat in one folder (tilemaker reads water_polygons.shp)."""
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True)
+    with zipfile.ZipFile(zip_path) as archive:
+        for member in archive.namelist():
+            name = Path(member).name
+            if name.startswith("water_polygons") and Path(name).suffix in SHAPEFILE_PARTS:
+                (dest / name).write_bytes(archive.read(member))
 
 
 def fetch(cache: Path, fetcher: Fetcher) -> list[dict[str, str]]:
@@ -77,6 +92,10 @@ def fetch(cache: Path, fetcher: Fetcher) -> list[dict[str, str]]:
     record(latest_contractor_details(fetcher), CONTRACTOR_DETAILS_FILE)
     record(latest_phs(fetcher), PHS_FILE)
     record(SourceRelease("osm", "Geofabrik united-kingdom-latest", OSM_UK_URL), OSM_FILE)
+    water = SourceRelease("water_polygons", "OSM water polygons (split, WGS84)", WATER_POLYGONS_URL)
+    water_zip = record(water, "water_polygons.zip")
+    _extract_coastline(water_zip, cache / COASTLINE_DIR)
+    water_zip.unlink()
 
     welsh_areas = {
         postcode_area(p.postcode) for p in read_onspd(onspd_csv(cache)) if p.nation == "Wales"
@@ -133,6 +152,12 @@ def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
         help="area codes to build; omit for all, give none for shared files only",
     )
     build_cmd.add_argument("--router", choices=["osrm", "fake"], default="osrm")
+    build_cmd.add_argument(
+        "--maps",
+        choices=["tilemaker", "none"],
+        default="none",
+        help="also build a map file per area (needs Docker)",
+    )
     build_cmd.add_argument("--built-at", default=None, help="ISO time (default: now, UTC)")
 
     merge_cmd = commands.add_parser("merge", help="merge area shards into a release")
@@ -164,7 +189,14 @@ def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
 
         built_at = args.built_at or datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         build_release(
-            args.cache, args.release, args.out, args.areas, args.router, load_config(), built_at
+            args.cache,
+            args.release,
+            args.out,
+            args.areas,
+            args.router,
+            load_config(),
+            built_at,
+            maps=args.maps,
         )
     elif args.command == "merge":
         merge(args.out, args.shards)

@@ -11,7 +11,10 @@ data/<release>/pharmacies.csv.gz               the GB pharmacy directory
 data/<release>/districts.csv.gz                postcode district -> area(s)
 data/<release>/areas/<area>/postcodes.csv.gz   live postcodes in one area
 data/<release>/areas/<area>/travel.csv.gz      nearby pharmacies for each of those postcodes
+data/<release>/areas/<area>/map.pmtiles        the area's street map (or map.pmtiles.000, .001, …)
 ```
+
+Everything under `/data/` is served with `Cache-Control: no-store`, so the browser never keeps it.
 
 ## pharmacies.csv.gz
 
@@ -49,6 +52,14 @@ For each postcode, the file lists every pharmacy within 5 km in a straight line,
 - `drive_s`: driving seconds (OSRM car profile)
 - A blank walk or drive cell means no route was found, for example to an island with no ferry in the map data.
 
+## areas/<area>/map.pmtiles
+
+The area's street map as a vector [PMTiles](https://github.com/protomaps/PMTiles) v3 file, built by tilemaker with the OpenMapTiles schema and slimmed to roads, road names, water, railways and place names, up to zoom 13. It covers the area's postcodes and every pharmacy listed for them, plus 1 km.
+
+The app downloads the whole file and reads it from memory. It never asks for parts of it (no HTTP range requests or tiles), so the host learns only which area was looked at.
+
+A map over 20 MiB is split into plain byte chunks, `map.pmtiles.000`, `.001` and so on. Joining them in order gives the original file.
+
 ## manifest.json
 
 The manifest records:
@@ -61,12 +72,23 @@ The manifest records:
 - the number of opening-hours values that couldn't be read
 - the number of online-only pharmacies excluded
 - for each area: its code, name, nation, postcode count, pair count, and each file's path, SHA-256 and size
+- for each area with a map, `map`: the whole map's `bytes` and `sha256`, and `parts`, each with `path`, `sha256` and `bytes`
+- `config.maps`: `tilemaker` when maps were built, otherwise `none`
 - `all_area_codes` (every area in Great Britain) and `complete`, which is true only when every one of them was built. Partial releases are published under a `data-YYYY-MM-partial` tag for testing and are never served by the site.
 
 The app checks every file it downloads against these checksums.
+
+## Release assets
+
+Each monthly GitHub release has two archives, each with a `.sha256` file:
+- `data-YYYY-MM.tar.gz`: everything above except the map files;
+- `maps-YYYY-MM.tar.gz`: only the map files.
+
+The site serves the latest two data releases, and maps for the latest only.
 
 ## Licences
 
 - Contains public sector information licensed under the Open Government Licence v3.0 (ONS Postcode Directory, NHSBSA, Public Health Scotland, NHS ODS).
 - Contains OS data © Crown copyright and database right.
 - The travel tables are derived from © OpenStreetMap contributors data and are offered under the Open Database Licence (ODbL).
+- Map files: © OpenStreetMap contributors (ODbL), including sea areas from osmdata.openstreetmap.de; schema OpenMapTiles (CC-BY 4.0).

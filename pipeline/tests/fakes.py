@@ -20,6 +20,16 @@ def onspd_zip_bytes(tmp: Path) -> bytes:
     return target.read_bytes()
 
 
+def water_zip_bytes(tmp: Path) -> bytes:
+    """A water-polygons-shaped zip: one folder holding the shapefile parts, plus a readme."""
+    target = tmp / "water_fixture.zip"
+    with zipfile.ZipFile(target, "w") as z:
+        for ext in ("shp", "shx", "dbf", "prj", "cpg"):
+            z.writestr(f"water-polygons-split-4326/water_polygons.{ext}", ext)
+        z.writestr("water-polygons-split-4326/README.txt", "ignored")
+    return target.read_bytes()
+
+
 class FakeFetcher:
     """Serves recorded API fixtures and fixed download bodies."""
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { formatRelease, loadRelease, parseRelease } from './release'
+import fixtureManifest from '../../../tests/fixtures/data/2026-11/manifest.json?raw'
+import { formatRelease, loadRelease, parseManifest, parseRelease } from './release'
 
 const manifest = { release: '2026-11', built_at: '2026-11-02T03:00:00Z' }
 
@@ -51,5 +52,29 @@ describe('loadRelease', () => {
       throw new TypeError('offline')
     }) as typeof fetch
     expect(await loadRelease(fake)).toBeNull()
+  })
+})
+
+describe('parseManifest', () => {
+  it('reads areas, files and map refs', () => {
+    const raw: unknown = JSON.parse(fixtureManifest)
+    const parsed = parseManifest({ release: '2026-11' }, raw)
+    expect(parsed?.release).toBe('2026-11')
+    expect(parsed?.directory.path).toBe('pharmacies.csv.gz')
+    expect(parsed?.areas.map((a) => a.code)).toEqual(['E06000050', 'W11000023'])
+    expect(parsed?.areas[0].map?.parts).toHaveLength(2)
+    expect(parsed?.attribution.some((line) => line.includes('OpenStreetMap'))).toBe(true)
+  })
+
+  it('rejects a manifest with a malformed file reference', () => {
+    const bad = {
+      release: '2026-11',
+      built_at: 'x',
+      attribution: [],
+      directory: { path: 1 },
+      districts: {},
+      areas: [],
+    }
+    expect(parseManifest({ release: '2026-11' }, bad)).toBeNull()
   })
 })

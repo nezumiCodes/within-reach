@@ -1,0 +1,96 @@
+import csv
+import gzip
+import importlib.util
+import io
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pipeline" / "tests"))
+from fakes import make_cache  # type: ignore[import-not-found]
+
+from within_reach_pipeline import cli
+from within_reach_pipeline.checks import run_checks
+from within_reach_pipeline.config import load_config
+
+_spec = importlib.util.spec_from_file_location(
+    "make_fixture_release", Path(__file__).with_name("make_fixture_release.py")
+)
+assert _spec is not None and _spec.loader is not None
+mfr = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(mfr)
+
+
+def _rows(path: Path) -> list[dict[str, str]]:
+    return list(csv.DictReader(io.StringIO(gzip.decompress(path.read_bytes()).decode())))
+
+
+@pytest.fixture
+def source(tmp_path: Path) -> Path:
+    out = tmp_path / "src" / "2026-11"
+    argv = ["build", "--cache", str(make_cache(tmp_path)), "--release", "2026-11"]
+    argv += ["--out", str(out), "--router", "fake", "--built-at", "2026-11-02T03:00:00Z"]
+    assert cli.run(argv) == 0
+    return out
+
+
+def test_trimmed_release_passes_release_checks(source: Path, tmp_path: Path) -> None:
+    districts = sorted(r["outward"] for r in _rows(source / "districts.csv.gz"))
+    dest = tmp_path / "fixture"
+    mfr.trim_release(source, dest / "2026-11", districts, chunk_bytes=None, build_map=None)
+    config = load_config()
+    config = type(config)(**{**config.__dict__, "distance_selling_min": 1})
+    failures = run_checks(dest / "2026-11", config, None, None, allow_partial=True)
+    assert failures == []
+    assert json.loads((dest / "latest.json").read_text()) == {
+        "release": "2026-11",
+        "previous": None,
+    }
+
+
+def test_trimmed_release_renumbers_and_links(source: Path, tmp_path: Path) -> None:
+    dest = tmp_path / "fixture" / "2026-11"
+    manifest = mfr.trim_release(source, dest, ["CH1"], chunk_bytes=None, build_map=None)
+    pharmacies = _rows(dest / "pharmacies.csv.gz")
+    assert [int(p["ph_idx"]) for p in pharmacies] == list(range(len(pharmacies)))
+    [area] = manifest["areas"]
+    postcodes = _rows(dest / area["files"]["postcodes"]["path"])
+    assert [p["postcode"] for p in postcodes] == sorted(p["postcode"] for p in postcodes)
+    assert all(p["postcode"].startswith("CH1 ") for p in postcodes)
+    assert [int(p["pc_idx"]) for p in postcodes] == list(range(len(postcodes)))
+    travel = _rows(dest / area["files"]["travel"]["path"])
+    assert {int(t["ph_idx"]) for t in travel} == set(range(len(pharmacies)))
+    assert {int(t["pc_idx"]) for t in travel} == set(range(len(postcodes)))
+
+
+def test_relabelled_postcode_lands_in_a_two_area_district(source: Path, tmp_path: Path) -> None:
+    dest = tmp_path / "fixture" / "2026-11"
+    manifest = mfr.trim_release(
+        source,
+        dest,
+        ["CH1", "LL11"],
+        chunk_bytes=None,
+        build_map=None,
+        two_area=("LL11", "SY14 9ZZ"),
+    )
+    districts = {r["outward"]: r["area_codes"] for r in _rows(dest / "districts.csv.gz")}
+    assert districts["SY14"] == "E06000050 W11000023"
+    welsh = next(a for a in manifest["areas"] if a["code"] == "W11000023")
+    postcodes = [p["postcode"] for p in _rows(dest / welsh["files"]["postcodes"]["path"])]
+    assert "SY14 9ZZ" in postcodes and postcodes == sorted(postcodes)
+
+
+def test_maps_are_built_and_split(source: Path, tmp_path: Path) -> None:
+    def fake_map(area: str, points: list[tuple[float, float]], dest: Path) -> None:
+        dest.write_bytes(b"PMTiles\x03" + bytes(300))
+
+    dest = tmp_path / "fixture" / "2026-11"
+    manifest = mfr.trim_release(
+        source, dest, ["CH1", "LL11"], chunk_bytes=None, build_map=fake_map, split_area="E06000050"
+    )
+    maps = {a["code"]: a["map"] for a in manifest["areas"]}
+    assert len(maps["E06000050"]["parts"]) == 2
+    assert len(maps["W11000023"]["parts"]) == 1
+    assert manifest["config"]["maps"] == "tilemaker"

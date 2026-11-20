@@ -19,5 +19,11 @@ distance_selling_max = 1000
 [routing]
 osrm_image = "ghcr.io/project-osrm/osrm-backend:v26.11.0-debian"
 
+[maps]
+# Area map files (Phase 2). Pinned by digest: the image only publishes a moving "master" tag.
+# This is the build measured on 18 Nov 2026 (Birmingham 3.0 MB, Kent 8.7 MB, Highland 26.8 MB).
+tilemaker_image = "ghcr.io/systemed/tilemaker@sha256:9cd8728a37a31c8a5205e091cedd3ff2c2c450c57e1ce3e5b58916185540ebba"
+chunk_bytes = 20_971_520   # 20 MiB per map file; larger maps are split into byte chunks
+
 [http]
 user_agent = "within-reach-pipeline (+https://withinreach.vasnik.net)"
