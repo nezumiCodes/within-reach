@@ -23,6 +23,14 @@ test.beforeEach(async ({ page, request }) => {
   const manifest = await (await request.get(`/data/${latest.release}/manifest.json`)).json()
   test.skip(!manifest.areas?.[0]?.map, 'this data release has no maps')
   await page.goto('/')
+  // Some headless browsers (Firefox on Linux CI) have no WebGL, so the map can't draw there;
+  // that path is covered by map-no-webgl.spec.ts.
+  const webgl = await page.evaluate(() => {
+    const gl = document.createElement('canvas').getContext('webgl')
+    gl?.getExtension('WEBGL_lose_context')?.loseContext()
+    return gl !== null
+  })
+  test.skip(!webgl, 'this browser has no WebGL')
 })
 
 test('a search draws the map with a pin per listed pharmacy', async ({ page }) => {
