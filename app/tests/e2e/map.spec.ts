@@ -84,3 +84,23 @@ test('map page passes axe', async ({ page }) => {
   const results = await new AxeBuilder({ page }).withTags(WCAG).analyze()
   expect(results.violations).toEqual([])
 })
+
+test('searching another area while a map loads abandons the first map', async ({ page }) => {
+  let release: () => void = () => {}
+  const held = new Promise<void>((resolve) => (release = resolve))
+  await page.route('**/areas/E06000050/map.pmtiles*', async (route) => {
+    await held
+    await route.continue()
+  })
+  const styleFetches: string[] = []
+  page.on('request', (r) => {
+    if (new URL(r.url()).pathname === '/map/style.json') styleFetches.push(r.url())
+  })
+  await search(page, 'CH2 3JQ') // England: its map download is held
+  await search(page, 'LL11 1AL') // Wales: a different area
+  await expect(map(page)).toHaveAttribute('data-map-state', 'ready', { timeout: 20_000 })
+  release()
+  await page.waitForTimeout(1500)
+  expect(styleFetches).toHaveLength(1) // only the Welsh map was ever created
+  await expect(page.locator('canvas.maplibregl-canvas')).toHaveCount(1)
+})

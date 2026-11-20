@@ -32,6 +32,8 @@
   let mapState = $state<'loading' | 'ready' | 'unavailable'>('loading')
   let received = $state(0)
   let lastFit = ''
+  // Set when this panel is replaced (another area searched) before its map finished loading.
+  let destroyed = false
 
   function hasWebGL(): boolean {
     try {
@@ -71,8 +73,15 @@
     }
     try {
       const data = await loadAreaMap(files, area.map, (n) => (received = n))
+      if (destroyed) return
       const lib = await import('./map-lib')
-      map = await lib.createMap(container, area.code, data)
+      if (destroyed) return
+      const created = await lib.createMap(container, area.code, data)
+      if (destroyed) {
+        created.remove()
+        return
+      }
+      map = created
       map.on('click', 'pins', (event) => {
         const idx = event.features?.[0]?.properties?.idx
         if (typeof idx === 'number') onSelect(idx)
@@ -84,11 +93,14 @@
     } catch {
       map?.remove()
       map = null
-      mapState = 'unavailable'
+      if (!destroyed) mapState = 'unavailable'
     }
   })
 
-  onDestroy(() => map?.remove())
+  onDestroy(() => {
+    destroyed = true
+    map?.remove()
+  })
 
   $effect(() => {
     void [shown, origin, selected]
