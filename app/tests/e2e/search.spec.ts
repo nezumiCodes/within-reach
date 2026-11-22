@@ -99,6 +99,7 @@ test('invalid, Northern Ireland and not-found messages', async ({ page }) => {
 })
 
 test('a district spanning two areas finds the postcode', async ({ page }) => {
+  test.skip(!!process.env.LIVE_URL, 'SY14 9ZZ is a made-up postcode that only the fixture has')
   await search(page, PC.twoArea)
   await expect(results(page)).toHaveCount(10)
 })

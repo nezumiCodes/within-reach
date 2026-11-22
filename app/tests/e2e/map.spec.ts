@@ -50,15 +50,19 @@ test('the map file is downloaded whole, once per part, with no range or tile req
   page,
   context,
 }) => {
+  // The expected parts come from the manifest, so this runs on the live release too.
+  const latest = await (await page.request.get('/data/latest.json')).json()
+  const manifest = await (await page.request.get(`/data/${latest.release}/manifest.json`)).json()
+  const area = manifest.areas.find((a: { code: string }) => a.code === 'E06000050')
+  const expected = area.map.parts.map((p: { path: string }) => `/data/${latest.release}/${p.path}`)
+  // The fixture's map is split in two, so splitting is always exercised in CI.
+  if (!process.env.LIVE_URL) expect(expected).toHaveLength(2)
   const requests: Request[] = []
   context.on('request', (r) => requests.push(r))
-  await search(page, 'CH2 3JQ') // Cheshire West and Chester: map in two parts
+  await search(page, 'CH2 3JQ') // Cheshire West and Chester
   await expect(map(page)).toHaveAttribute('data-map-state', 'ready', { timeout: 20_000 })
   const mapRequests = requests.filter((r) => r.url().includes('map.pmtiles'))
-  expect(mapRequests.map((r) => new URL(r.url()).pathname).sort()).toEqual([
-    '/data/2026-11/areas/E06000050/map.pmtiles.000',
-    '/data/2026-11/areas/E06000050/map.pmtiles.001',
-  ])
+  expect(mapRequests.map((r) => new URL(r.url()).pathname).sort()).toEqual(expected.sort())
   for (const r of mapRequests) expect(r.headers()['range']).toBeUndefined()
   expect(requests.filter((r) => TILE_PATH.test(new URL(r.url()).pathname))).toEqual([])
 })
