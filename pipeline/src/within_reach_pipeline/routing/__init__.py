@@ -20,8 +20,17 @@ class TableResult:
     durations_s: list[list[int | None]]
 
 
+# The OSRM class the UK walking profile gives cycle paths not signed for walkers.
+CYCLEWAY_CLASS = "cycleway"
+
+
 class Router(Protocol):
-    def table(self, sources: Sequence[LatLon], destinations: Sequence[LatLon]) -> TableResult: ...
+    def table(
+        self,
+        sources: Sequence[LatLon],
+        destinations: Sequence[LatLon],
+        exclude: str | None = None,
+    ) -> TableResult: ...
 
 
 @dataclass(frozen=True)
@@ -32,6 +41,7 @@ class TravelRow:
     walk_m: int | None
     walk_s: int | None
     drive_s: int | None
+    walk_cycle: bool = False  # the best walk needs a cycle path not signed for walkers
 
 
 def round_half_up(value: float) -> int:
@@ -49,12 +59,21 @@ def _groups(postcodes: Sequence[Postcode], tile_m: int, max_sources: int) -> lis
     return groups
 
 
+def needs_cycle_path(walk_m: int | None, without_m: int | None, min_extra_m: int) -> bool:
+    """True when the walk exists, and avoiding unsigned cycle paths is impossible or more than
+    min_extra_m longer (a few metres at a crossing, or a different snap point, don't count)."""
+    if walk_m is None:
+        return False
+    return without_m is None or without_m - walk_m > min_extra_m
+
+
 def route_candidates(
     postcodes: Sequence[Postcode],
     pharmacies: Sequence[Pharmacy],
     candidates: Sequence[list[Candidate]],
     walk: Router,
     drive: Router,
+    cycle_min_extra_m: int = 50,
     tile_m: int = 2000,
     max_sources: int = 250,
 ) -> list[TravelRow]:
@@ -67,6 +86,7 @@ def route_candidates(
         sources = [(postcodes[idx].lat, postcodes[idx].lon) for idx in group]
         targets = [(pharmacies[ph].lat, pharmacies[ph].lon) for ph in destinations]
         walked = walk.table(sources, targets)
+        walked_without = walk.table(sources, targets, exclude=CYCLEWAY_CLASS)
         driven = drive.table(sources, targets)
         for row, pc_idx in enumerate(group):
             rows_by_postcode[pc_idx] = [
@@ -77,6 +97,11 @@ def route_candidates(
                     walk_m=walked.distances_m[row][column[c.ph_idx]],
                     walk_s=walked.durations_s[row][column[c.ph_idx]],
                     drive_s=driven.durations_s[row][column[c.ph_idx]],
+                    walk_cycle=needs_cycle_path(
+                        walked.distances_m[row][column[c.ph_idx]],
+                        walked_without.distances_m[row][column[c.ph_idx]],
+                        cycle_min_extra_m,
+                    ),
                 )
                 for c in candidates[pc_idx]
             ]

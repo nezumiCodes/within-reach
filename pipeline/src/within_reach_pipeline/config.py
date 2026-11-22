@@ -12,6 +12,9 @@ class PipelineConfig:
     radius_m: int
     max_candidates: int
     min_candidates: int
+    reach_cap_m: int
+    reach_max_rounds: int
+    cycle_note_min_extra_m: int
     max_file_bytes: int
     count_tolerance: float
     geocode_failure_limit: float
@@ -30,6 +33,9 @@ def load_config(path: Path = DEFAULT_CONFIG) -> PipelineConfig:
         radius_m=int(catchment["radius_m"]),
         max_candidates=int(catchment["max_candidates"]),
         min_candidates=int(catchment["min_candidates"]),
+        reach_cap_m=int(catchment["reach_cap_m"]),
+        reach_max_rounds=int(catchment["reach_max_rounds"]),
+        cycle_note_min_extra_m=int(catchment["cycle_note_min_extra_m"]),
         max_file_bytes=int(release["max_file_bytes"]),
         count_tolerance=float(release["count_tolerance"]),
         geocode_failure_limit=float(release["geocode_failure_limit"]),

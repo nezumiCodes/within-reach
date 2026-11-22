@@ -21,3 +21,12 @@ def test_maps_settings_load() -> None:
     config = load_config(CONFIG)
     assert config.map_chunk_bytes == 20 * 1024 * 1024
     assert "@sha256:" in config.tilemaker_image
+
+
+def test_cycle_and_reach_settings_load() -> None:
+    config = load_config(CONFIG)
+    assert (config.cycle_note_min_extra_m, config.reach_cap_m, config.reach_max_rounds) == (
+        50,
+        25000,
+        4,
+    )
