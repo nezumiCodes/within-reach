@@ -41,15 +41,20 @@ Areas are upper-tier councils in England, councils in Scotland and health boards
 
 ## areas/<area>/travel.csv.gz
 
-`pc_idx,ph_idx,straight_m,walk_m,walk_s,drive_s`
+`pc_idx,ph_idx,straight_m,walk_m,walk_s,drive_s,walk_cycle`
+
+Releases before December 2026 have no `walk_cycle` column. The app reads both layouts.
 
 Rows are grouped by `pc_idx`. Within a postcode they're ordered by `straight_m`, then nation, then code.
 
 For each postcode, the file lists every pharmacy within 5 km in a straight line, up to the nearest 40. If that gives fewer than 5, it lists the nearest 5 at any distance instead. Pharmacies in neighbouring areas and nations are included.
 
+Some of the nearest pharmacies can't be reached, for example across an estuary. If a postcode can reach fewer than 5 of its pharmacies on foot or by car, the next nearest are added and routed, up to 25 km in a straight line and within the area's map extract, for at most 4 rounds. The unreachable ones are then dropped. A postcode that can reach none keeps its original list, with blank routes.
+
 - `straight_m`: straight-line metres
-- `walk_m` and `walk_s`: walking metres and seconds (OSRM foot profile)
+- `walk_m` and `walk_s`: walking metres and seconds. They use UK walking rules (`foot-gb`, in `pipeline/osrm/foot-gb.lua`): OSRM's foot profile, plus cycle paths (unless tagged `foot=no`), bridleways, and trunk roads where a pavement is mapped.
 - `drive_s`: driving seconds (OSRM car profile)
+- `walk_cycle`: `1` when the best walk needs a cycle path not signed for walkers (no `foot=yes`, `designated` or `permissive`), meaning that avoiding it is impossible or adds more than 50 m. Otherwise blank.
 - A blank walk or drive cell means no route was found, for example to an island with no ferry in the map data.
 
 ## areas/<area>/map.pmtiles
@@ -65,13 +70,14 @@ A map over 20 MiB is split into plain byte chunks, `map.pmtiles.000`, `.001` and
 The manifest records:
 - the release name and build time
 - each source's label, URL and SHA-256
-- the catchment settings and OSRM version
+- the catchment settings and OSRM version, and in `config`: `walk_profile` (`foot-gb`), `reach_cap_m`, `reach_max_rounds` and `cycle_note_min_extra_m`
 - attribution text
 - pharmacy counts per nation
 - pharmacies that couldn't be geocoded
 - the number of opening-hours values that couldn't be read
 - the number of online-only pharmacies excluded
 - for each area: its code, name, nation, postcode count, pair count, and each file's path, SHA-256 and size
+- for each area, three counts: `postcodes_without_walk` (no walking route to any listed pharmacy), `postcodes_without_route` (neither walking nor driving), and `postcodes_widened_to_cap` (postcodes that reach some pharmacies, but fewer than 5, after widening the search as far as it goes)
 - for each area with a map, `map`: the whole map's `bytes` and `sha256`, and `parts`, each with `path`, `sha256` and `bytes`
 - `config.maps`: `tilemaker` when maps were built, otherwise `none`
 - `all_area_codes` (every area in Great Britain) and `complete`, which is true only when every one of them was built. Partial releases are published under a `data-YYYY-MM-partial` tag for testing and are never served by the site.

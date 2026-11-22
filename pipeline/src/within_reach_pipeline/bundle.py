@@ -106,7 +106,7 @@ def write_area(
     travel_info = _write_gz_csv(
         out,
         f"{base}/travel.csv.gz",
-        ["pc_idx", "ph_idx", "straight_m", "walk_m", "walk_s", "drive_s"],
+        ["pc_idx", "ph_idx", "straight_m", "walk_m", "walk_s", "drive_s", "walk_cycle"],
         (
             [
                 r.pc_idx,
@@ -115,6 +115,7 @@ def write_area(
                 _blank(r.walk_m),
                 _blank(r.walk_s),
                 _blank(r.drive_s),
+                "1" if r.walk_cycle else "",
             ]
             for r in rows
         ),

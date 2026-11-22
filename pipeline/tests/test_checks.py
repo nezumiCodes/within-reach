@@ -321,3 +321,84 @@ def test_maps_none_skips_map_checks(tmp_path: Path) -> None:
     release = _release(tmp_path)
     assert _manifest(release)["config"]["maps"] == "none"
     assert run_checks(release, CONFIG, None, None) == []
+
+
+def _edit_travel(release: Path, area: int, edit) -> None:  # type: ignore[no-untyped-def]
+    """Rewrite one area's travel rows (header kept) and keep the manifest checksums valid."""
+    manifest = _manifest(release)
+    entry = manifest["areas"][area]["files"]["travel"]
+    path = release / entry["path"]
+    header, *rows = gzip.decompress(path.read_bytes()).decode().splitlines()
+    rows = edit([r.split(",") for r in rows])
+    data = gzip.compress(
+        ("\n".join([header, *(",".join(r) for r in rows)]) + "\n").encode(), mtime=0
+    )
+    path.write_bytes(data)
+    entry["sha256"], entry["bytes"] = hashlib.sha256(data).hexdigest(), len(data)
+    manifest["areas"][area]["pairs"] = len(rows)
+    _save(release, manifest)
+
+
+def _keep_first(n: int, *pcs: str):  # type: ignore[no-untyped-def]
+    """Keep only the first n rows of the given postcodes (pc_idx strings)."""
+
+    def edit(rows: list[list[str]]) -> list[list[str]]:
+        seen: dict[str, int] = {}
+        kept = []
+        for r in rows:
+            seen[r[0]] = seen.get(r[0], 0) + 1
+            if r[0] not in pcs or seen[r[0]] <= n:
+                kept.append(r)
+        return kept
+
+    return edit
+
+
+def _set_widened(release: Path, area: int, count: int) -> None:
+    manifest = _manifest(release)
+    manifest["areas"][area]["postcodes_widened_to_cap"] = count
+    _save(release, manifest)
+
+
+def test_walk_cycle_without_walk_fails(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+
+    def edit(rows: list[list[str]]) -> list[list[str]]:
+        rows[0][3], rows[0][4], rows[0][6] = "", "", "1"
+        return rows
+
+    _edit_travel(release, 0, edit)
+    assert _only(run_checks(release, CONFIG, None, None)) == "walk_cycle"
+
+
+def test_min_candidates_passes_short_postcode_widened_to_cap(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    _edit_travel(release, 0, _keep_first(3, "0"))
+    _set_widened(release, 0, 1)
+    assert run_checks(release, CONFIG, None, None) == []
+
+
+def test_min_candidates_fails_short_postcode_with_unreachable_rows(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+
+    def edit(rows: list[list[str]]) -> list[list[str]]:
+        rows = _keep_first(3, "0")(rows)
+        rows[0][3] = rows[0][4] = rows[0][5] = ""  # first row of postcode 0: no route at all
+        return rows
+
+    _edit_travel(release, 0, edit)
+    _set_widened(release, 0, 1)
+    assert _only(run_checks(release, CONFIG, None, None)) == "min_candidates"
+
+
+def test_min_candidates_fails_more_short_reachable_than_widened(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    _edit_travel(release, 0, _keep_first(3, "0", "1"))
+    _set_widened(release, 0, 1)
+    assert _only(run_checks(release, CONFIG, None, None)) == "min_candidates"
+
+
+def test_min_candidates_full_lists_still_pass(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    assert all(a["postcodes_widened_to_cap"] == 0 for a in _manifest(release)["areas"])
+    assert run_checks(release, CONFIG, None, None) == []
