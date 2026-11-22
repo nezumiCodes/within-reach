@@ -49,6 +49,11 @@ def test_build_cli_fake_router(tmp_path: Path) -> None:
     assert any("OpenStreetMap" in line for line in manifest["attribution"])
     assert manifest["config"]["radius_m"] == 5000
     assert manifest["config"]["walk_profile"] == "foot-gb"
+    assert manifest["config"]["reach_cap_m"] == 25000
+    assert manifest["config"]["reach_max_rounds"] == 4
+    assert manifest["config"]["cycle_note_min_extra_m"] == 50
+    assert all(a["postcodes_without_route"] == 0 for a in manifest["areas"])
+    assert all(a["postcodes_widened_to_cap"] == 0 for a in manifest["areas"])
     assert set(manifest["sources"]) == {
         "onspd",
         "nhsbsa",

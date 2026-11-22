@@ -20,14 +20,16 @@ from within_reach_pipeline.candidates import select_candidates
 from within_reach_pipeline.config import PipelineConfig
 from within_reach_pipeline.http import HttpxFetcher
 from within_reach_pipeline.maps import MAP_CONFIG, build_area_map, write_map_entry
-from within_reach_pipeline.models import Postcode
+from within_reach_pipeline.models import Pharmacy, Postcode
 from within_reach_pipeline.onspd import read_area_names, read_onspd
 from within_reach_pipeline.pharmacies import build_directory
 from within_reach_pipeline.pharmacies.england import read_distance_selling_codes, read_nhsbsa
 from within_reach_pipeline.pharmacies.scotland import read_phs
 from within_reach_pipeline.pharmacies.wales import load_ods_wales
-from within_reach_pipeline.routing import WALK_PROFILE, LatLon, Router, TravelRow, route_candidates
+from within_reach_pipeline.reach import route_reachable
+from within_reach_pipeline.routing import WALK_PROFILE, Router, TravelRow
 from within_reach_pipeline.routing.fake import FakeRouter
+from within_reach_pipeline.routing.osrm import BBox, area_bbox
 
 log = logging.getLogger(__name__)
 RouterKind = Literal["osrm", "fake"]
@@ -35,12 +37,17 @@ MapsKind = Literal["tilemaker", "none"]
 WALK_SPEED_M_S, DRIVE_SPEED_M_S = 1.4, 13.4  # fake router only
 
 
-def _area_extract(stack: ExitStack, cache: Path, points: Sequence[LatLon]) -> Path:
+def _area_extract(stack: ExitStack, cache: Path, bbox: BBox) -> Path:
     """The area's part of the GB map, used for routing and for the area map file."""
-    from within_reach_pipeline.routing.osrm import area_bbox, clip_extract
+    from within_reach_pipeline.routing.osrm import clip_extract
 
     work = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="within-reach-")))
-    return clip_extract(cache / "uk.osm.pbf", area_bbox(points), work / "area.osm.pbf")
+    return clip_extract(cache / "uk.osm.pbf", bbox, work / "area.osm.pbf")
+
+
+def _inside(bbox: BBox, pharmacy: Pharmacy) -> bool:
+    min_lon, min_lat, max_lon, max_lat = bbox
+    return min_lon <= pharmacy.lon <= max_lon and min_lat <= pharmacy.lat <= max_lat
 
 
 def _routers(
@@ -56,6 +63,15 @@ def _routers(
     walk_url = stack.enter_context(osrm_server(pbf, "foot", config.osrm_image, 5101))
     drive_url = stack.enter_context(osrm_server(pbf, "car", config.osrm_image, 5102))
     return OsrmRouter(walk_url, fetcher, "foot"), OsrmRouter(drive_url, fetcher, "car")
+
+
+def postcodes_without_route(rows: Sequence[TravelRow]) -> int:
+    """Postcodes with neither a walking nor a driving route to any of their pharmacies."""
+    reachable: dict[int, bool] = {}
+    for row in rows:
+        ok = row.walk_m is not None or row.drive_s is not None
+        reachable[row.pc_idx] = reachable.get(row.pc_idx, False) or ok
+    return sum(1 for ok in reachable.values() if not ok)
 
 
 def postcodes_without_walk(rows: Sequence[TravelRow]) -> int:
@@ -126,12 +142,32 @@ def build_release(
         used = sorted({c.ph_idx for row in candidates for c in row})
         points = [(p.lat, p.lon) for p in area_postcodes]
         points += [(pharmacies[i].lat, pharmacies[i].lon) for i in used]
+        # The extract is sized from the first-pass candidates; widening only adds pharmacies
+        # inside it, because nothing outside can be routed.
+        bbox = area_bbox(points)
+        allowed = {i for i, p in enumerate(pharmacies) if _inside(bbox, p)}
         map_entry: dict[str, Any] | None = None
         with ExitStack() as stack:
             needs_extract = router == "osrm" or maps == "tilemaker"
-            pbf = _area_extract(stack, cache, points) if needs_extract else None
+            pbf = _area_extract(stack, cache, bbox) if needs_extract else None
             walk, drive = _routers(router, stack, pbf, config)
-            rows = route_candidates(area_postcodes, pharmacies, candidates, walk, drive)
+            reach = route_reachable(
+                area_postcodes,
+                pharmacies,
+                candidates,
+                walk,
+                drive,
+                allowed=allowed,
+                min_reachable=config.min_candidates,
+                max_candidates=config.max_candidates,
+                cap_m=config.reach_cap_m,
+                max_rounds=config.reach_max_rounds,
+                cycle_min_extra_m=config.cycle_note_min_extra_m,
+            )
+            rows = reach.rows
+            final_used = sorted({r.ph_idx for r in rows})
+            points = [(p.lat, p.lon) for p in area_postcodes]
+            points += [(pharmacies[i].lat, pharmacies[i].lon) for i in final_used]
             if maps == "tilemaker" and pbf is not None:
                 built = pbf.parent / "map.pmtiles"
                 log.info("area %s: building map", code)
@@ -153,6 +189,8 @@ def build_release(
                 "postcodes": len(area_postcodes),
                 "pairs": len(rows),
                 "postcodes_without_walk": postcodes_without_walk(rows),
+                "postcodes_without_route": postcodes_without_route(rows),
+                "postcodes_widened_to_cap": len(reach.widened_to_cap),
                 "files": {"postcodes": postcode_info.as_dict(), "travel": travel_info.as_dict()},
                 **({"map": map_entry} if map_entry is not None else {}),
             }
@@ -172,6 +210,9 @@ def build_release(
             "min_candidates": config.min_candidates,
             "osrm_version": config.osrm_image.rsplit(":", 1)[-1],
             "walk_profile": WALK_PROFILE,
+            "reach_cap_m": config.reach_cap_m,
+            "reach_max_rounds": config.reach_max_rounds,
+            "cycle_note_min_extra_m": config.cycle_note_min_extra_m,
             "router": router,
             "maps": maps,
         },
