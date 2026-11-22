@@ -13,12 +13,31 @@ from typing import Literal
 import httpx
 
 from within_reach_pipeline.http import Fetcher
-from within_reach_pipeline.routing import LatLon, TableResult, round_half_up
+from within_reach_pipeline.routing import WALK_PROFILE, LatLon, TableResult, round_half_up
 
 log = logging.getLogger(__name__)
 Profile = Literal["foot", "car"]
 METRES_PER_DEGREE_LAT = 111_195.0
 BBox = tuple[float, float, float, float]  # min_lon, min_lat, max_lon, max_lat
+# UK walking rules: a wrapper around OSRM's stock foot.lua (pipeline/osrm/foot-gb.lua).
+PROFILE_DIR = Path(__file__).resolve().parents[3] / "osrm"
+_PROFILE_PATHS: dict[str, str] = {"foot": f"/profiles/{WALK_PROFILE}.lua", "car": "/opt/car.lua"}
+
+
+def _docker(workdir: Path, image: str) -> list[str]:
+    mounts = ["-v", f"{workdir.resolve()}:/data", "-v", f"{PROFILE_DIR}:/profiles:ro"]
+    return ["docker", "run", "--rm", *mounts, image]
+
+
+def extract_command(
+    workdir: Path, profile: Profile, image: str, profile_path: str | None = None
+) -> list[str]:
+    """osrm-extract for one profile: UK walking rules for foot, stock rules for car.
+
+    profile_path overrides the Lua file (the tests compare against the stock /opt/foot.lua).
+    """
+    lua = profile_path or _PROFILE_PATHS[profile]
+    return [*_docker(workdir, image), "osrm-extract", "-p", lua, "/data/area.osm.pbf"]
 
 
 def area_bbox(points: Iterable[LatLon], margin_m: int = 3000) -> BBox:
@@ -110,17 +129,19 @@ def _run(command: Sequence[str]) -> None:
 
 
 @contextmanager
-def osrm_server(pbf: Path, profile: Profile, image: str, port: int) -> Iterator[str]:
+def osrm_server(
+    pbf: Path, profile: Profile, image: str, port: int, profile_path: str | None = None
+) -> Iterator[str]:
     """Build an OSRM graph for pbf with the given profile and serve it on 127.0.0.1:port."""
     workdir = pbf.parent / f"osrm-{profile}"
     if workdir.exists():
         shutil.rmtree(workdir)
     workdir.mkdir(parents=True)
     shutil.copyfile(pbf, workdir / "area.osm.pbf")
-    mount = ["-v", f"{workdir.resolve()}:/data"]
-    docker = ["docker", "run", "--rm", *mount, image]
+    mount = ["-v", f"{workdir.resolve()}:/data", "-v", f"{PROFILE_DIR}:/profiles:ro"]
+    docker = _docker(workdir, image)
     log.info("building OSRM %s graph for %s", profile, pbf.name)
-    _run([*docker, "osrm-extract", "-p", f"/opt/{profile}.lua", "/data/area.osm.pbf"])
+    _run(extract_command(workdir, profile, image, profile_path))
     _run([*docker, "osrm-partition", "/data/area.osrm"])
     _run([*docker, "osrm-customize", "/data/area.osrm"])
 
@@ -167,7 +188,12 @@ class OsrmRouter:
         self.fetcher = fetcher
         self.profile = profile
 
-    def table(self, sources: Sequence[LatLon], destinations: Sequence[LatLon]) -> TableResult:
+    def table(
+        self,
+        sources: Sequence[LatLon],
+        destinations: Sequence[LatLon],
+        exclude: str | None = None,
+    ) -> TableResult:
         coords = ";".join(f"{coord(lon)},{coord(lat)}" for lat, lon in [*sources, *destinations])
         source_ids = ";".join(str(i) for i in range(len(sources)))
         dest_ids = ";".join(str(len(sources) + i) for i in range(len(destinations)))
@@ -175,6 +201,8 @@ class OsrmRouter:
             f"{self.base_url}/table/v1/{self.profile}/{coords}"
             f"?sources={source_ids}&destinations={dest_ids}&annotations=distance,duration"
         )
+        if exclude is not None:
+            url += f"&exclude={exclude}"
         data = self.fetcher.get_json(url)
         if data.get("code") != "Ok":
             raise RuntimeError(f"OSRM table failed: {data.get('code')} {data.get('message', '')}")

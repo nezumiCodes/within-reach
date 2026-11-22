@@ -48,6 +48,7 @@ def test_build_cli_fake_router(tmp_path: Path) -> None:
     assert manifest["geocode_failures"] == []
     assert any("OpenStreetMap" in line for line in manifest["attribution"])
     assert manifest["config"]["radius_m"] == 5000
+    assert manifest["config"]["walk_profile"] == "foot-gb"
     assert set(manifest["sources"]) == {
         "onspd",
         "nhsbsa",

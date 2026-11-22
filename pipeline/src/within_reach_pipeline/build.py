@@ -26,7 +26,7 @@ from within_reach_pipeline.pharmacies import build_directory
 from within_reach_pipeline.pharmacies.england import read_distance_selling_codes, read_nhsbsa
 from within_reach_pipeline.pharmacies.scotland import read_phs
 from within_reach_pipeline.pharmacies.wales import load_ods_wales
-from within_reach_pipeline.routing import LatLon, Router, TravelRow, route_candidates
+from within_reach_pipeline.routing import WALK_PROFILE, LatLon, Router, TravelRow, route_candidates
 from within_reach_pipeline.routing.fake import FakeRouter
 
 log = logging.getLogger(__name__)
@@ -171,6 +171,7 @@ def build_release(
             "max_candidates": config.max_candidates,
             "min_candidates": config.min_candidates,
             "osrm_version": config.osrm_image.rsplit(":", 1)[-1],
+            "walk_profile": WALK_PROFILE,
             "router": router,
             "maps": maps,
         },

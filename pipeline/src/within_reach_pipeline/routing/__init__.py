@@ -10,6 +10,8 @@ from within_reach_pipeline.candidates import Candidate
 from within_reach_pipeline.models import Pharmacy, Postcode
 
 LatLon = tuple[float, float]
+# Name of the UK walking rules (pipeline/osrm/foot-gb.lua), recorded in each release manifest.
+WALK_PROFILE = "foot-gb"
 
 
 @dataclass(frozen=True)
