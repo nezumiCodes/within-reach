@@ -113,6 +113,10 @@ def trim_release(
     districts_out: dict[str, set[str]] = {}
     areas_out: list[dict[str, Any]] = []
     for code, (postcodes, travel) in sorted(kept.items()):
+        # Releases from December 2026 have a walk_cycle column; older ones don't.
+        tr_header = ["pc_idx", "ph_idx", "straight_m", "walk_m", "walk_s", "drive_s"]
+        if travel and "walk_cycle" in travel[0]:
+            tr_header.append("walk_cycle")
         postcodes = sorted(postcodes, key=lambda p: p["postcode"])
         new_pc = {p["pc_idx"]: i for i, p in enumerate(postcodes)}
         for p in postcodes:
@@ -127,6 +131,7 @@ def trim_release(
                     t["walk_m"],
                     t["walk_s"],
                     t["drive_s"],
+                    *([t["walk_cycle"]] if "walk_cycle" in tr_header else []),
                 ]
                 for t in travel
             ),
@@ -134,11 +139,15 @@ def trim_release(
         )
         base = f"areas/{code}"
         walkable = {int(r[0]) for r in tr_rows if r[3] != ""}
+        routable = {int(r[0]) for r in tr_rows if r[3] != "" or r[5] != ""}
         entry: dict[str, Any] = {
             **{k: source_areas[code][k] for k in ("code", "name", "nation")},
             "postcodes": len(pc_rows),
             "pairs": len(tr_rows),
             "postcodes_without_walk": len(pc_rows) - len(walkable),
+            "postcodes_without_route": len(pc_rows) - len(routable),
+            # Trimming keeps whole postcode lists, so a short postcode stays short.
+            "postcodes_widened_to_cap": source_areas[code].get("postcodes_widened_to_cap", 0),
             "files": {
                 "postcodes": _write(
                     dest, f"{base}/postcodes.csv.gz", ["pc_idx", "postcode", "lat", "lon"], pc_rows
@@ -146,7 +155,7 @@ def trim_release(
                 "travel": _write(
                     dest,
                     f"{base}/travel.csv.gz",
-                    ["pc_idx", "ph_idx", "straight_m", "walk_m", "walk_s", "drive_s"],
+                    tr_header,
                     tr_rows,
                 ),
             },

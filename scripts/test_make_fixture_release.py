@@ -94,3 +94,36 @@ def test_maps_are_built_and_split(source: Path, tmp_path: Path) -> None:
     assert len(maps["E06000050"]["parts"]) == 2
     assert len(maps["W11000023"]["parts"]) == 1
     assert manifest["config"]["maps"] == "tilemaker"
+
+
+def _rewrite_travel(source: Path, edit) -> None:  # type: ignore[no-untyped-def]
+    manifest = json.loads((source / "manifest.json").read_text())
+    path = source / manifest["areas"][0]["files"]["travel"]["path"]
+    header, *rows = gzip.decompress(path.read_bytes()).decode().splitlines()
+    header, rows = edit(header, rows)
+    path.write_bytes(gzip.compress(("\n".join([header, *rows]) + "\n").encode(), mtime=0))
+
+
+def test_walk_cycle_column_is_carried_through(source: Path, tmp_path: Path) -> None:
+    def mark_all(header: str, rows: list[str]) -> tuple[str, list[str]]:
+        return header, [r + "1" for r in rows]  # each row ends with an empty walk_cycle
+
+    _rewrite_travel(source, mark_all)
+    dest = tmp_path / "fixture" / "2026-11"
+    manifest = mfr.trim_release(source, dest, ["CH1"], chunk_bytes=None, build_map=None)
+    travel = _rows(dest / manifest["areas"][0]["files"]["travel"]["path"])
+    assert "walk_cycle" in travel[0]
+    assert travel and all(t["walk_cycle"] == "1" for t in travel)
+    assert manifest["areas"][0]["postcodes_without_route"] == 0
+    assert manifest["areas"][0]["postcodes_widened_to_cap"] == 0
+
+
+def test_older_six_column_source_stays_six_columns(source: Path, tmp_path: Path) -> None:
+    def drop_column(header: str, rows: list[str]) -> tuple[str, list[str]]:
+        return header.rsplit(",", 1)[0], [r.rsplit(",", 1)[0] for r in rows]
+
+    _rewrite_travel(source, drop_column)
+    dest = tmp_path / "fixture" / "2026-11"
+    manifest = mfr.trim_release(source, dest, ["CH1"], chunk_bytes=None, build_map=None)
+    travel = _rows(dest / manifest["areas"][0]["files"]["travel"]["path"])
+    assert list(travel[0]) == ["pc_idx", "ph_idx", "straight_m", "walk_m", "walk_s", "drive_s"]

@@ -122,15 +122,26 @@ export function parsePostcodes(text: string): PostcodeRow[] {
   }))
 }
 
-const TRAVEL_COLUMNS = ['pc_idx', 'ph_idx', 'straight_m', 'walk_m', 'walk_s', 'drive_s'] as const
+const TRAVEL_COLUMNS_V1 = ['pc_idx', 'ph_idx', 'straight_m', 'walk_m', 'walk_s', 'drive_s']
+// December 2026 on: walk_cycle marks a walk that needs a cycle path not signed for walkers.
+const TRAVEL_COLUMNS = [...TRAVEL_COLUMNS_V1, 'walk_cycle']
 
+/** Reads both layouts, so the previous release still loads after the format change. */
 export function parseTravel(text: string): TravelRow[] {
-  return rowsOf(text, 'travel', TRAVEL_COLUMNS).map((r) => ({
+  const header = parseCsv(text, { header: true })[0]?.join(',')
+  const columns = header === TRAVEL_COLUMNS_V1.join(',') ? TRAVEL_COLUMNS_V1 : TRAVEL_COLUMNS
+  return rowsOf(text, 'travel', columns).map((r) => ({
     pcIdx: int(r[0]),
     phIdx: int(r[1]),
     straightM: int(r[2]),
     walkM: intOrNull(r[3]),
     walkS: intOrNull(r[4]),
     driveS: intOrNull(r[5]),
+    walkCycle: flag(r[6] ?? ''),
   }))
+}
+
+function flag(cell: string): boolean {
+  if (cell !== '' && cell !== '1') throw new Error(`not a flag: ${cell}`)
+  return cell === '1'
 }

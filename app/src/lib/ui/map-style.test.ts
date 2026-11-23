@@ -19,7 +19,7 @@ function result(idx: number, lon: number, lat: number): Result {
     lon,
     days: Array.from({ length: 7 }, () => parseDay('')),
   }
-  return { pharmacy, straightM: 0, walkM: 0, walkS: 0, driveS: 0 }
+  return { pharmacy, straightM: 0, walkM: 0, walkS: 0, driveS: 0, walkCycle: false }
 }
 
 describe('buildStyle', () => {

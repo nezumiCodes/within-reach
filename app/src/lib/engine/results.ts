@@ -11,6 +11,7 @@ export type Result = {
   walkM: number | null
   walkS: number | null
   driveS: number | null
+  walkCycle: boolean
 }
 
 export type SortMode = 'walk' | 'drive'
@@ -30,6 +31,7 @@ export function buildResults(pcIdx: number, travel: TravelRow[], pharmacies: Pha
       walkM: row.walkM,
       walkS: row.walkS,
       driveS: row.driveS,
+      walkCycle: row.walkCycle,
     }))
 }
 
