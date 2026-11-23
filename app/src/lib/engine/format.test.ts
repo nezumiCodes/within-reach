@@ -12,12 +12,18 @@ import type { Result } from './results'
 import type { Pharmacy } from './types'
 
 const p = { days: [] } as unknown as Pharmacy
-const r = (walkM: number | null, walkS: number | null, driveS: number | null): Result => ({
+const r = (
+  walkM: number | null,
+  walkS: number | null,
+  driveS: number | null,
+  walkCycle = false,
+): Result => ({
   pharmacy: p,
   straightM: 0,
   walkM,
   walkS,
   driveS,
+  walkCycle,
 })
 
 describe('formatDistance', () => {
@@ -49,6 +55,16 @@ describe('travelLine', () => {
 
   it('says when there is no driving route', () => {
     expect(travelLine(r(1300, 960, null))).toBe('1.3 km · 16 min walk · No driving route found')
+  })
+
+  it('notes a walk that needs a cycle path', () => {
+    expect(travelLine(r(1400, 1080, 300, true))).toBe(
+      '1.4 km · 18 min walk, partly on a cycle path · 5 min drive',
+    )
+  })
+
+  it('has no note otherwise', () => {
+    expect(travelLine(r(1400, 1080, 300, false))).toBe('1.4 km · 18 min walk · 5 min drive')
   })
 })
 

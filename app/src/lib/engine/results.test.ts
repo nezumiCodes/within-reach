@@ -25,7 +25,7 @@ function pharmacy(
 }
 
 function result(p: Pharmacy, walkM: number | null, driveS: number | null, straightM = 100): Result {
-  return { pharmacy: p, straightM, walkM, walkS: walkM, driveS }
+  return { pharmacy: p, straightM, walkM, walkS: walkM, driveS, walkCycle: false }
 }
 
 const codes = (rs: Result[]): string[] => rs.map((r) => r.pharmacy.code)
@@ -34,11 +34,18 @@ describe('buildResults', () => {
   it('keeps only rows for the postcode and joins the pharmacy', () => {
     const pharmacies = [pharmacy(0), pharmacy(1)]
     const travel: TravelRow[] = [
-      { pcIdx: 0, phIdx: 1, straightM: 50, walkM: 60, walkS: 45, driveS: 30 },
-      { pcIdx: 1, phIdx: 0, straightM: 10, walkM: 10, walkS: 8, driveS: 5 },
+      { pcIdx: 0, phIdx: 1, straightM: 50, walkM: 60, walkS: 45, driveS: 30, walkCycle: true },
+      { pcIdx: 1, phIdx: 0, straightM: 10, walkM: 10, walkS: 8, driveS: 5, walkCycle: false },
     ]
     expect(buildResults(0, travel, pharmacies)).toEqual([
-      { pharmacy: pharmacies[1], straightM: 50, walkM: 60, walkS: 45, driveS: 30 },
+      {
+        pharmacy: pharmacies[1],
+        straightM: 50,
+        walkM: 60,
+        walkS: 45,
+        driveS: 30,
+        walkCycle: true,
+      },
     ])
   })
 })

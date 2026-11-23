@@ -46,9 +46,16 @@ def test_unreachable_leaves_blanks() -> None:
 class CountingRouter:
     def __init__(self) -> None:
         self.calls = 0
+        self.excludes: list[str | None] = []
 
-    def table(self, sources: Sequence[LatLon], destinations: Sequence[LatLon]) -> TableResult:
+    def table(
+        self,
+        sources: Sequence[LatLon],
+        destinations: Sequence[LatLon],
+        exclude: str | None = None,
+    ) -> TableResult:
         self.calls += 1
+        self.excludes.append(exclude)
         return WALK.table(sources, destinations)
 
 
@@ -62,7 +69,10 @@ def test_tiling_calls_once_per_tile() -> None:
     candidates = [[Candidate(0, 1000)] for _ in postcodes]
     walk, drive = CountingRouter(), CountingRouter()
     route_candidates(postcodes, pharmacies, candidates, walk, drive, tile_m=2000)
-    assert (walk.calls, drive.calls) == (2, 2)
+    # walking is asked twice per tile: normally, and without unsigned cycle paths
+    assert (walk.calls, drive.calls) == (4, 2)
+    assert walk.excludes == [None, "cycleway", None, "cycleway"]
+    assert drive.excludes == [None, None]
 
 
 def test_large_tile_split_by_max_sources() -> None:
@@ -70,7 +80,7 @@ def test_large_tile_split_by_max_sources() -> None:
     candidates = [[Candidate(0, 1000)] for _ in postcodes]
     walk, drive = CountingRouter(), CountingRouter()
     route_candidates(postcodes, [_pharmacy("FA001", 53.01)], candidates, walk, drive, max_sources=2)
-    assert walk.calls == 3
+    assert walk.calls == 6
 
 
 def test_order_preserved() -> None:
@@ -79,3 +89,48 @@ def test_order_preserved() -> None:
     candidates = [[Candidate(1, 500), Candidate(0, 900)], [Candidate(0, 100)]]
     rows = route_candidates(postcodes, pharmacies, candidates, WALK, DRIVE)
     assert [(r.pc_idx, r.ph_idx) for r in rows] == [(0, 1), (0, 0), (1, 0)]
+
+
+TARGET = (53.0 + ONE_KM_LAT, -2.89)
+
+
+def _one_row(walk: FakeRouter) -> TravelRow:
+    [row] = route_candidates(
+        [_postcode("CH1 1AA", 53.0, 400000)],
+        [_pharmacy("FA001", TARGET[0])],
+        [[Candidate(0, 1000)]],
+        walk,
+        DRIVE,
+    )
+    return row
+
+
+def test_walk_cycle_set_when_only_cycle_path_reaches() -> None:
+    row = _one_row(FakeRouter(1.4, cycle_only={TARGET}))
+    assert row.walk_m == 1300 and row.walk_cycle is True
+
+
+def test_walk_cycle_needs_more_than_threshold() -> None:
+    assert _one_row(FakeRouter(1.4, cycle_extra_m=50)).walk_cycle is False
+    assert _one_row(FakeRouter(1.4, cycle_extra_m=51)).walk_cycle is True
+
+
+def test_walk_cycle_false_when_excluded_route_is_shorter() -> None:
+    # A different snap point can make the route without cycle paths slightly shorter.
+    assert _one_row(FakeRouter(1.4, cycle_extra_m=-30)).walk_cycle is False
+
+
+def test_walk_cycle_false_without_walk_route() -> None:
+    assert _one_row(FakeRouter(1.4, unreachable={TARGET})).walk_cycle is False
+
+
+def test_walk_cycle_threshold_is_a_parameter() -> None:
+    [row] = route_candidates(
+        [_postcode("CH1 1AA", 53.0, 400000)],
+        [_pharmacy("FA001", TARGET[0])],
+        [[Candidate(0, 1000)]],
+        FakeRouter(1.4, cycle_extra_m=20),
+        DRIVE,
+        cycle_min_extra_m=10,
+    )
+    assert row.walk_cycle is True

@@ -32,4 +32,6 @@ export type TravelRow = {
   walkM: number | null
   walkS: number | null
   driveS: number | null
+  /** The best walk needs a cycle path not signed for walkers. */
+  walkCycle: boolean
 }

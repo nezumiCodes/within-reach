@@ -37,12 +37,21 @@ def test_write_area_roundtrip(tmp_path: Path) -> None:
         "0,CH1 1AA,53.190000,-2.890000",
     ]
     assert _lines(tmp_path / travel_info.path) == [
-        "pc_idx,ph_idx,straight_m,walk_m,walk_s,drive_s",
-        "0,3,120,150,107,",
+        "pc_idx,ph_idx,straight_m,walk_m,walk_s,drive_s,walk_cycle",
+        "0,3,120,150,107,,",
     ]
     data = (tmp_path / travel_info.path).read_bytes()
     assert travel_info.sha256 == hashlib.sha256(data).hexdigest()
     assert travel_info.bytes == len(data)
+
+
+def test_travel_file_has_walk_cycle_column(tmp_path: Path) -> None:
+    rows = [TravelRow(0, 3, 120, 150, 107, 30, walk_cycle=True), TravelRow(0, 4, 130, 160, 115, 31)]
+    _, travel_info = write_area(tmp_path, "E06000050", PC[:1], rows)
+    assert _lines(tmp_path / travel_info.path)[1:] == [
+        "0,3,120,150,107,30,1",
+        "0,4,130,160,115,31,",
+    ]
 
 
 def test_directory_hours_cells(tmp_path: Path) -> None:

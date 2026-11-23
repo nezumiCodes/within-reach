@@ -28,7 +28,8 @@ export function travelLine(r: Result): string {
   const walk =
     r.walkM === null || r.walkS === null
       ? 'No walking route found'
-      : `${formatDistance(r.walkM)} · ${formatMinutes(r.walkS)} walk`
+      : `${formatDistance(r.walkM)} · ${formatMinutes(r.walkS)} walk` +
+        (r.walkCycle ? ', partly on a cycle path' : '')
   const drive = r.driveS === null ? 'No driving route found' : `${formatMinutes(r.driveS)} drive`
   return `${walk} · ${drive}`
 }

@@ -3,7 +3,13 @@ from typing import Any
 
 import pytest
 
-from within_reach_pipeline.routing.osrm import OsrmRouter, area_bbox, osmium_extract_command
+from within_reach_pipeline.routing.osrm import (
+    PROFILE_DIR,
+    OsrmRouter,
+    area_bbox,
+    extract_command,
+    osmium_extract_command,
+)
 
 
 class RecordingFetcher:
@@ -126,3 +132,35 @@ def test_osmium_native_when_installed() -> None:
         Path("/in/uk.osm.pbf"), (0.0, 1.0, 2.0, 3.0), Path("/o/a.pbf"), native=True
     )
     assert cmd[0] == "osmium"
+
+
+def test_extract_command_mounts_profiles_and_uses_foot_gb(tmp_path: Path) -> None:
+    cmd = extract_command(tmp_path, "foot", "img:1")
+    assert f"{PROFILE_DIR}:/profiles:ro" in cmd
+    assert cmd[-3:] == ["-p", "/profiles/foot-gb.lua", "/data/area.osm.pbf"]
+
+
+def test_extract_command_car_keeps_stock_profile(tmp_path: Path) -> None:
+    assert extract_command(tmp_path, "car", "img:1")[-3:] == [
+        "-p",
+        "/opt/car.lua",
+        "/data/area.osm.pbf",
+    ]
+
+
+def test_profile_file_exists() -> None:
+    assert (PROFILE_DIR / "foot-gb.lua").is_file()
+
+
+def test_table_exclude_in_url() -> None:
+    fetcher = RecordingFetcher({"code": "Ok", "distances": [[1.0]], "durations": [[1.0]]})
+    OsrmRouter("http://x", fetcher, profile="foot").table(
+        [(53.0, -2.9)], [(53.1, -2.9)], exclude="cycleway"
+    )
+    assert fetcher.urls[-1].endswith("&annotations=distance,duration&exclude=cycleway")
+
+
+def test_table_without_exclude_has_no_param() -> None:
+    fetcher = RecordingFetcher({"code": "Ok", "distances": [[1.0]], "durations": [[1.0]]})
+    OsrmRouter("http://x", fetcher, profile="foot").table([(53.0, -2.9)], [(53.1, -2.9)])
+    assert "exclude" not in fetcher.urls[-1]

@@ -93,6 +93,10 @@ def write_directory(out: Path, pharmacies: Sequence[Pharmacy]) -> FileInfo:
     return _write_gz_csv(out, "pharmacies.csv.gz", header, rows)
 
 
+# Travel file layout (docs/data-format.md). The app also reads the older layout without walk_cycle.
+TRAVEL_COLUMNS = ["pc_idx", "ph_idx", "straight_m", "walk_m", "walk_s", "drive_s", "walk_cycle"]
+
+
 def write_area(
     out: Path, area_code: str, postcodes: Sequence[Postcode], rows: Sequence[TravelRow]
 ) -> tuple[FileInfo, FileInfo]:
@@ -106,7 +110,7 @@ def write_area(
     travel_info = _write_gz_csv(
         out,
         f"{base}/travel.csv.gz",
-        ["pc_idx", "ph_idx", "straight_m", "walk_m", "walk_s", "drive_s"],
+        TRAVEL_COLUMNS,
         (
             [
                 r.pc_idx,
@@ -115,6 +119,7 @@ def write_area(
                 _blank(r.walk_m),
                 _blank(r.walk_s),
                 _blank(r.drive_s),
+                "1" if r.walk_cycle else "",
             ]
             for r in rows
         ),

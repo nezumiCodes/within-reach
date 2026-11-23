@@ -7,6 +7,7 @@ across area and national borders. Ordering follows NFR-11: straight-line metres,
 then code (the directory is already sorted by nation and code, so its index breaks ties).
 """
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -64,3 +65,24 @@ def select_candidates(
         candidates.sort(key=lambda c: (c.straight_m, c.ph_idx))
         results.append(candidates)
     return results
+
+
+def next_candidates(
+    postcode: Postcode,
+    pharmacies: Sequence[Pharmacy],
+    tree: cKDTree,
+    tried: set[int],
+    allowed: set[int],
+    count: int,
+    cap_m: int,
+) -> list[Candidate]:
+    """The nearest count pharmacies not yet tried, inside allowed and within cap_m (straight
+    line), used to widen the search when the first candidates can't be reached."""
+    found = [
+        Candidate(int(i), round(math.dist((postcode.east, postcode.north), (p.east, p.north))))
+        for i in tree.query_ball_point((postcode.east, postcode.north), float(cap_m))
+        if int(i) in allowed and int(i) not in tried
+        for p in (pharmacies[int(i)],)
+    ]
+    found.sort(key=lambda c: (c.straight_m, c.ph_idx))
+    return found[:count]

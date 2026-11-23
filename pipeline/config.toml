@@ -4,6 +4,15 @@
 radius_m = 5000         # every pharmacy within this straight-line distance...
 max_candidates = 40     # ...capped at the nearest 40 in dense areas...
 min_candidates = 5      # ...and always at least the nearest 5, however far
+# If fewer than min_candidates of those can be reached on foot or by car (an estuary in the
+# way), further pharmacies are added and routed, up to this straight-line distance and number
+# of rounds, and the unreachable ones are dropped. See the walking rules and reachable
+# pharmacies design (docs/superpowers/specs/2026-11-22-...).
+reach_cap_m = 25000
+reach_max_rounds = 4
+# A walk is noted as "partly on a cycle path" when avoiding cycle paths not signed for walkers
+# is impossible or adds more than this many metres.
+cycle_note_min_extra_m = 50
 
 [release]
 max_file_bytes = 25_165_824   # 24 MiB: headroom under Cloudflare Pages' 25 MiB per-file limit

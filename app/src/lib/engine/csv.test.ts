@@ -42,8 +42,43 @@ describe('release files', () => {
   it('parseTravel turns blank cells into null', () => {
     const text = 'pc_idx,ph_idx,straight_m,walk_m,walk_s,drive_s\n0,5,300,,,120\n'
     expect(parseTravel(text)).toEqual([
-      { pcIdx: 0, phIdx: 5, straightM: 300, walkM: null, walkS: null, driveS: 120 },
+      {
+        pcIdx: 0,
+        phIdx: 5,
+        straightM: 300,
+        walkM: null,
+        walkS: null,
+        driveS: 120,
+        walkCycle: false,
+      },
     ])
+  })
+
+  it('parseTravel reads the 7-column travel file', () => {
+    const rows = parseTravel(
+      'pc_idx,ph_idx,straight_m,walk_m,walk_s,drive_s,walk_cycle\n' +
+        '0,1,900,1400,1080,300,1\n0,2,950,1500,1150,310,\n',
+    )
+    expect(rows.map((r) => r.walkCycle)).toEqual([true, false])
+  })
+
+  it('parseTravel reads the older 6-column file with no notes', () => {
+    const rows = parseTravel(
+      'pc_idx,ph_idx,straight_m,walk_m,walk_s,drive_s\n0,1,900,1400,1080,300\n',
+    )
+    expect(rows[0].walkCycle).toBe(false)
+  })
+
+  it('parseTravel rejects any other header', () => {
+    expect(() => parseTravel('pc_idx,ph_idx,straight_m,walk_m,walk_s,drive_s,extra\n')).toThrow(
+      'unexpected columns in travel',
+    )
+  })
+
+  it('parseTravel rejects a walk_cycle value other than 1 or blank', () => {
+    expect(() =>
+      parseTravel('pc_idx,ph_idx,straight_m,walk_m,walk_s,drive_s,walk_cycle\n0,1,9,9,9,9,yes\n'),
+    ).toThrow()
   })
 
   it('parsePostcodes reads rows in order', () => {
