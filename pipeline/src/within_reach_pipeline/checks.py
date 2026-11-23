@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from within_reach_pipeline.bundle import TRAVEL_COLUMNS
 from within_reach_pipeline.config import PipelineConfig
 from within_reach_pipeline.maps import PMTILES_HEADER_BYTES, pmtiles_bounds
 
@@ -118,6 +119,41 @@ def _check_min_candidates(
     return failures
 
 
+def _check_travel_format(release: Path, manifest: dict[str, Any]) -> list[CheckFailure]:
+    """Travel files use the current layout and walk_cycle is 1 or blank: the app rejects
+    anything else, which would break every search in that area."""
+    failures: list[CheckFailure] = []
+    for area in manifest["areas"]:
+        path = release / area["files"]["travel"]["path"]
+        with gzip.open(path, "rt", encoding="utf-8", newline="") as f:
+            header = next(csv.reader(f), [])
+        if header != TRAVEL_COLUMNS:
+            failures.append(CheckFailure("travel_format", f"{area['code']}: header {header}"))
+            continue
+        bad = sum(1 for row in _rows(path) if row["walk_cycle"] not in ("", "1"))
+        if bad:
+            failures.append(
+                CheckFailure("travel_format", f"{area['code']}: {bad} rows with a bad walk_cycle")
+            )
+    return failures
+
+
+def _check_manifest_fields(manifest: dict[str, Any]) -> list[CheckFailure]:
+    """The fields the walking rules and widening added (docs/data-format.md)."""
+    failures: list[CheckFailure] = []
+    if "walk_profile" not in manifest.get("config", {}):
+        failures.append(CheckFailure("manifest_fields", "config has no walk_profile"))
+    for area in manifest["areas"]:
+        missing = [
+            key
+            for key in ("postcodes_without_route", "postcodes_widened_to_cap")
+            if key not in area
+        ]
+        if missing:
+            failures.append(CheckFailure("manifest_fields", f"{area['code']}: missing {missing}"))
+    return failures
+
+
 def _check_walk_cycle(release: Path, manifest: dict[str, Any]) -> list[CheckFailure]:
     """walk_cycle marks a walk that needs a cycle path, so it needs a walk."""
     failures: list[CheckFailure] = []
@@ -200,7 +236,9 @@ def _check_reference(
             if travel is not None:
                 break
         if travel is None:
-            failures.append(CheckFailure("reference", f"{postcode}: not in any built area"))
+            # A partial release (reference areas only) can't answer cases elsewhere.
+            if manifest.get("complete", True):
+                failures.append(CheckFailure("reference", f"{postcode}: not in any built area"))
             continue
         # Travel rows are stored in straight-line order; the reference is about walking.
         # Rows without a walking route sort last. Order within the top N is not compared,
@@ -279,6 +317,8 @@ def run_checks(
     failures += _check_nations(manifest)
     failures += _check_min_candidates(release_dir, manifest, config)
     failures += _check_walk_cycle(release_dir, manifest)
+    failures += _check_travel_format(release_dir, manifest)
+    failures += _check_manifest_fields(manifest)
     failures += _check_geocode(manifest, config.geocode_failure_limit)
     failures += _check_distance_selling(manifest, config)
     if manifest["config"].get("maps") == "tilemaker":

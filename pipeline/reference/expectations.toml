@@ -65,3 +65,20 @@ postcode = "LL21 0BB"
 # 18,528 m, so it overtakes Boots (FWR51, 18,326 m) as the third nearest.
 nearest = ["Wales:FWP35", "Wales:FWV26", "Wales:FWV40"]
 walk_m_range = [230, 312]
+
+[[case]]
+# Lache estate, Chester (added Nov 2026, UK walking rules): every way out on foot uses a cycle
+# path not signed for walkers. Westminster Park Pharmacy CH4 7QD 3,909 m; Morrisons Pharmacy
+# CH4 8RU 4,838 m; Owen's Chemist CH4 8BJ 4,849 m. Before the UK rules: no walking route.
+postcode = "CH4 7DJ"
+nearest = ["England:FLL40", "Wales:FWD79", "England:FLM30"]
+walk_m_range = [3323, 4495]
+
+[[case]]
+# Allhallows, Hoo peninsula (added Nov 2026, reachable pharmacies): the five nearest in a
+# straight line are on Canvey Island, across the Thames, and can't be reached. Knights Pharmacy
+# ME3 9DT 9,199 m; Hoo Pharmacy ME3 9AA 9,505 m. Only two are compared: the next ones, on
+# Sheppey, are about 43 km on foot and within metres of each other.
+postcode = "ME3 9EJ"
+nearest = ["England:FEM57", "England:FJE35"]
+walk_m_range = [7819, 10579]

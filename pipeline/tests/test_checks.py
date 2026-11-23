@@ -402,3 +402,64 @@ def test_min_candidates_full_lists_still_pass(tmp_path: Path) -> None:
     release = _release(tmp_path)
     assert all(a["postcodes_widened_to_cap"] == 0 for a in _manifest(release)["areas"])
     assert run_checks(release, CONFIG, None, None) == []
+
+
+def _edit_header(release: Path, area: int, header: str) -> None:
+    manifest = _manifest(release)
+    entry = manifest["areas"][area]["files"]["travel"]
+    path = release / entry["path"]
+    _, *rows = gzip.decompress(path.read_bytes()).decode().splitlines()
+    data = gzip.compress(("\n".join([header, *rows]) + "\n").encode(), mtime=0)
+    path.write_bytes(data)
+    entry["sha256"], entry["bytes"] = hashlib.sha256(data).hexdigest(), len(data)
+    _save(release, manifest)
+
+
+def test_travel_header_must_be_the_current_layout(tmp_path: Path) -> None:
+    # The app reads only the 6- and 7-column layouts; a new release must be 7 columns.
+    release = _release(tmp_path)
+    _edit_header(release, 0, "pc_idx,ph_idx,straight_m,walk_m,walk_s,drive_s,cycle")
+    assert _only(run_checks(release, CONFIG, None, None)) == "travel_format"
+
+
+def test_walk_cycle_must_be_one_or_blank(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+
+    def edit(rows: list[list[str]]) -> list[list[str]]:
+        rows[0][6] = "yes"
+        return rows
+
+    _edit_travel(release, 0, edit)
+    assert _only(run_checks(release, CONFIG, None, None)) == "travel_format"
+
+
+def test_manifest_needs_the_new_fields(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    manifest = _manifest(release)
+    del manifest["config"]["walk_profile"]
+    del manifest["areas"][1]["postcodes_without_route"]
+    _save(release, manifest)
+    failures = run_checks(release, CONFIG, None, None)
+    assert {f.check for f in failures} == {"manifest_fields"}
+    assert len(failures) == 2
+
+
+def _reference_for(tmp_path: Path, postcode: str) -> Path:
+    path = tmp_path / "expectations.toml"
+    path.write_text(
+        f'[[case]]\npostcode = "{postcode}"\nnearest = ["England:FA001"]\nwalk_m_range = [0, 1]\n'
+    )
+    return path
+
+
+def test_reference_case_outside_a_partial_release_is_skipped(tmp_path: Path) -> None:
+    # Partial runs build only the Chester and Wrexham areas; a Medway case can't apply.
+    release = _partial_release(tmp_path)
+    reference = _reference_for(tmp_path, "ZZ9 9ZZ")
+    assert run_checks(release, CONFIG, None, reference, allow_partial=True) == []
+
+
+def test_reference_case_missing_from_a_complete_release_fails(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    reference = _reference_for(tmp_path, "ZZ9 9ZZ")
+    assert _only(run_checks(release, CONFIG, None, reference)) == "reference"

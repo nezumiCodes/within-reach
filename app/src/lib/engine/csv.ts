@@ -44,9 +44,10 @@ export function parseCsv(text: string, options: { header?: boolean } = {}): stri
   return options.header ? rows : rows.slice(1)
 }
 
-function rowsOf(text: string, file: string, columns: readonly string[]): string[][] {
+function rowsOf(text: string, file: string, ...layouts: (readonly string[])[]): string[][] {
   const rows = parseCsv(text, { header: true })
-  if (rows.length === 0 || rows[0].join(',') !== columns.join(',')) {
+  const header = rows.length === 0 ? null : rows[0].join(',')
+  if (!layouts.some((columns) => columns.join(',') === header)) {
     throw new Error(`unexpected columns in ${file}`)
   }
   return rows.slice(1)
@@ -128,9 +129,7 @@ const TRAVEL_COLUMNS = [...TRAVEL_COLUMNS_V1, 'walk_cycle']
 
 /** Reads both layouts, so the previous release still loads after the format change. */
 export function parseTravel(text: string): TravelRow[] {
-  const header = parseCsv(text, { header: true })[0]?.join(',')
-  const columns = header === TRAVEL_COLUMNS_V1.join(',') ? TRAVEL_COLUMNS_V1 : TRAVEL_COLUMNS
-  return rowsOf(text, 'travel', columns).map((r) => ({
+  return rowsOf(text, 'travel', TRAVEL_COLUMNS_V1, TRAVEL_COLUMNS).map((r) => ({
     pcIdx: int(r[0]),
     phIdx: int(r[1]),
     straightM: int(r[2]),
