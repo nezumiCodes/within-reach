@@ -11,7 +11,9 @@ walk_m_range = [60, 80]
 [[case]]
 # Hoole: Boughton Pharmacy CH2 3DP 816 m; Swettenhams Chemists CH2 2LJ 1331 m; Tesco Instore Pharmacy CH1 3JS 1673 m
 postcode = "CH2 3JQ"
-nearest = ["England:FFY48", "England:FPP41", "England:FXP75"]
+# UK walking rules (Nov 2026): Boots, Foregate Street (FT378) is now 1,615 m on foot, not
+# 1,796 m, so it overtakes Tesco (FXP75, 1,673 m) as the third nearest.
+nearest = ["England:FFY48", "England:FPP41", "England:FT378"]
 walk_m_range = [694, 938]
 
 [[case]]
@@ -59,5 +61,7 @@ walk_m_range = [110, 150]
 [[case]]
 # Corwen (rural Wales): Rowlands Pharmacy LL21 0DE 271 m; Well Street Pharmacy LL15 1AW 18069 m; Boots LL15 1DP 18326 m
 postcode = "LL21 0BB"
-nearest = ["Wales:FWP35", "Wales:FWV26", "Wales:FWR51"]
+# UK walking rules (Nov 2026): Glyn Ceiriog Pharmacy (FWV40) is now 18,190 m on foot, not
+# 18,528 m, so it overtakes Boots (FWR51, 18,326 m) as the third nearest.
+nearest = ["Wales:FWP35", "Wales:FWV26", "Wales:FWV40"]
 walk_m_range = [230, 312]

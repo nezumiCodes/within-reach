@@ -44,3 +44,35 @@ Design: `docs/superpowers/specs/2026-11-18-phase-2-public-search-design.md`. Spe
 - The list shows 10 at a time. Pin numbers follow the list as currently shown.
 - Maps are a separate release asset (`maps-YYYY-MM.tar.gz`); only the latest release's maps are deployed.
 - The data files must be served as they are (`.csv.gz` as `application/gzip`, no `Content-Encoding`). A host that re-encodes them fails the app's checksum check, on purpose. Cloudflare Pages serves them correctly; the local preview server is configured to match.
+
+## UK walking rules and reachable pharmacies (v0.2.0)
+
+Design: `docs/superpowers/specs/2026-11-22-walking-rules-and-reachable-pharmacies-design.md`.
+
+- **Walking uses UK rules** (`pipeline/osrm/foot-gb.lua`, recorded as `walk_profile: foot-gb` in each manifest). It's OSRM's stock foot profile, loaded unchanged, plus:
+  - cycle paths, unless tagged `foot=no`;
+  - bridleways;
+  - trunk roads, only where a pavement or foot access is tagged.
+
+  Driving is unchanged.
+- **Results note "partly on a cycle path"** when the best walk needs a cycle path not signed for walkers (no `foot=yes`, `designated` or `permissive`), meaning that avoiding it is impossible or adds more than 50 m. Signed shared-use paths count as ordinary walking.
+- **Reachable pharmacies.** If fewer than 5 of a postcode's pharmacies can be reached on foot or by car, the search widens:
+  - the next nearest are added, up to 25 km in a straight line, within the area's map extract, for at most 4 rounds;
+  - the unreachable ones are then dropped;
+  - a postcode that can reach none keeps its original list.
+
+**Effect, measured on 23 Nov 2026** (same November sources, before and after this change):
+
+| Area | Postcodes without a walking route, before | After |
+|---|---|---|
+| Cheshire West and Chester (E06000050) | 69 (Lache, CH4 7 / CH4 9 / CH99 9) | 0 |
+| Medway (E06000035) | 49 (Allhallows, ME3 9) | 0 |
+| Betsi Cadwaladr (W11000023) | 0 | 0 |
+
+- **Allhallows (ME3 9EJ)** now lists Knights Pharmacy and Hoo Pharmacy (about 9 km on foot, 13 minutes by car) instead of five Canvey Island pharmacies across the Thames.
+- **Lache (CH4 7DJ)** now has walking routes, every one partly on a cycle path. The nearest, Westminster Park Pharmacy, is 3.9 km on foot.
+- **How often the note appears:** on 10% of all rows in Cheshire West and Chester, 8% in Betsi Cadwaladr and 7% in Medway. Many UK cycle paths don't say whether walkers may use them.
+- **Build time** for the three areas with maps: about 4½ minutes, the same before and after.
+- **Two reference cases changed** their third-nearest pharmacy, because a walk got shorter through a newly allowed bridleway or trunk-road pavement: CH2 3JQ (Boots, Foregate Street) and LL21 0BB (Glyn Ceiriog Pharmacy). `pipeline/reference/expectations.toml` notes why.
+- **The data-2026-11 baseline** for all of Great Britain was 183 postcodes without a walking route: Cheshire West and Chester 69, Argyll and Bute 60, Medway 49, Wokingham 5. Oban (Argyll and Bute) and Crowthorne (Wokingham) have a different cause, still to be investigated.
+- **The app reads both travel-file layouts**, so v0.2.0 can go live before the first release built with these rules.

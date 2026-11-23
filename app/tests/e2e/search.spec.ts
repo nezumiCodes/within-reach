@@ -11,6 +11,7 @@ const PC = {
   chesterOther: 'CH2 1HU',
   wrexham: 'LL11 1AL', // Welsh: no opening hours
   twoArea: 'SY14 9ZZ', // district mapped to both areas; postcode in the second
+  cycle: 'CH4 7DJ', // Lache: every way out on foot uses a cycle path not signed for walkers
 }
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
@@ -75,6 +76,15 @@ test('Show 10 more adds entries until all are shown', async ({ page }) => {
   await page.getByRole('button', { name: 'Show 10 more' }).click()
   await expect(results(page)).toHaveCount(18)
   await expect(page.getByRole('button', { name: 'Show 10 more' })).toHaveCount(0)
+})
+
+test('a walk that needs an unsigned cycle path says so', async ({ page }) => {
+  test.skip(!!process.env.LIVE_URL, 'depends on the fixture release')
+  await search(page, PC.cycle)
+  await expect(results(page)).toHaveCount(10)
+  await expect(results(page).first()).toContainText('min walk, partly on a cycle path')
+  await search(page, PC.chester)
+  await expect(results(page).first()).not.toContainText('cycle path')
 })
 
 test('opening hours open in a details element', async ({ page }) => {
