@@ -1,0 +1,21 @@
+{
+  "value": [
+    {
+      "ODSCode": "FE412",
+      "Services": [
+        {"ServiceCode": "SRV0001", "ServiceName": "Made-up service A"},
+        {"ServiceCode": "SRV0274", "ServiceName": "Made-up needle service"}
+      ]
+    },
+    {
+      "ODSCode": "fa002",
+      "Services": []
+    },
+    {
+      "ODSCode": "FZ999",
+      "Services": [
+        {"ServiceCode": "SRV0001", "ServiceName": "Made-up service A"}
+      ]
+    }
+  ]
+}

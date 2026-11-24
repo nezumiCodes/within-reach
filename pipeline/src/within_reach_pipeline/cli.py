@@ -1,23 +1,25 @@
-"""Command line: fetch | build | merge | check."""
+"""Command line: fetch | fetch-services | build | merge | areas | check."""
 
 import argparse
 import hashlib
 import json
 import logging
+import os
 import re
 import shutil
 import zipfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from within_reach_pipeline.bundle import merge_manifests, write_manifest
-from within_reach_pipeline.config import load_config
+from within_reach_pipeline.config import PipelineConfig, load_config
 from within_reach_pipeline.http import Fetcher, HttpxFetcher
 from within_reach_pipeline.onspd import read_onspd
 from within_reach_pipeline.pharmacies.england import read_nhsbsa
 from within_reach_pipeline.pharmacies.wales import fetch_ods_wales, postcode_area, save_ods_wales
+from within_reach_pipeline.services import fetch_snapshot, save_snapshot
 from within_reach_pipeline.sources import (
     OSM_UK_URL,
     WATER_POLYGONS_URL,
@@ -36,6 +38,7 @@ CONTRACTOR_DETAILS_FILE = "contractor_details.csv"
 PHS_FILE = "phs.csv"
 OSM_FILE = "uk.osm.pbf"
 ODS_WALES_FILE = "ods_wales.json"
+SERVICES_FILE = "dohs_services.json"
 ONSPD_DIR = "onspd"
 COASTLINE_DIR = "coastline"
 SHAPEFILE_PARTS = (".shp", ".shx", ".dbf", ".prj", ".cpg")
@@ -135,11 +138,29 @@ def merge(out: Path, shard_dirs: Sequence[Path]) -> dict[str, Any]:
     return merged
 
 
-def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
+def run(
+    argv: Sequence[str],
+    fetcher: Fetcher | None = None,
+    env: Mapping[str, str] | None = None,
+    config: PipelineConfig | None = None,
+) -> int:
+    env = os.environ if env is None else env
+    if config is None:
+        # An explicit config wins, then WITHIN_REACH_CONFIG (a path), then the repo default.
+        config = (
+            load_config(Path(env["WITHIN_REACH_CONFIG"]))
+            if env.get("WITHIN_REACH_CONFIG")
+            else load_config()
+        )
     parser = argparse.ArgumentParser(prog="within-reach-pipeline")
     commands = parser.add_subparsers(dest="command", required=True)
     fetch_cmd = commands.add_parser("fetch", help="download the latest public data")
     fetch_cmd.add_argument("--cache", type=Path, required=True)
+
+    services_cmd = commands.add_parser(
+        "fetch-services", help="download pharmacy services from the NHS England DoHS API"
+    )
+    services_cmd.add_argument("--cache", type=Path, required=True)
 
     build_cmd = commands.add_parser("build", help="build a release from a fetch cache")
     build_cmd.add_argument("--cache", type=Path, required=True)
@@ -183,7 +204,18 @@ def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
     if args.command == "fetch":
-        fetch(args.cache, fetcher or HttpxFetcher(load_config().user_agent))
+        fetch(args.cache, fetcher or HttpxFetcher(config.user_agent))
+    elif args.command == "fetch-services":
+        if not config.services_enabled:
+            log.info("services disabled in config; no snapshot written")
+            return 0
+        api_key = env.get("NHS_DOHS_API_KEY")
+        if not api_key:
+            raise SystemExit("NHS_DOHS_API_KEY is not set")
+        api_base = env.get("NHS_DOHS_API_BASE", config.services_api_base)
+        args.cache.mkdir(parents=True, exist_ok=True)
+        snapshot = fetch_snapshot(fetcher or HttpxFetcher(config.user_agent), api_base, api_key)
+        save_snapshot(snapshot, args.cache / SERVICES_FILE)
     elif args.command == "build":
         from within_reach_pipeline.build import build_release
 
@@ -194,7 +226,7 @@ def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
             args.out,
             args.areas,
             args.router,
-            load_config(),
+            config,
             built_at,
             maps=args.maps,
         )
@@ -214,7 +246,7 @@ def run(argv: Sequence[str], fetcher: Fetcher | None = None) -> int:
         from within_reach_pipeline.checks import run_checks
 
         failures = run_checks(
-            args.release_dir, load_config(), args.previous_dir, args.reference, args.allow_partial
+            args.release_dir, config, args.previous_dir, args.reference, args.allow_partial
         )
         for failure in failures:
             log.error("CHECK FAILED [%s] %s", failure.check, failure.detail)
