@@ -1,5 +1,8 @@
+import csv
+import gzip
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -7,7 +10,9 @@ import pytest
 from fakes import make_cache
 
 from within_reach_pipeline import cli
-from within_reach_pipeline.bundle import merge_manifests
+from within_reach_pipeline.bundle import SERVICES_ATTRIBUTION, merge_manifests
+from within_reach_pipeline.config import PipelineConfig, load_config
+from within_reach_pipeline.services import Snapshot, save_snapshot
 
 BUILT_AT = "2026-11-02T03:00:00Z"
 
@@ -199,3 +204,81 @@ def test_merge_rejects_shards_that_disagree_on_maps() -> None:
     without = {"directory": {"sha256": "a"}, "areas": [], "config": {"maps": "none"}}
     with pytest.raises(ValueError, match="maps"):
         merge_manifests(base, [with_maps, without])
+
+
+def _services_config() -> PipelineConfig:
+    return replace(load_config(), services_enabled=True)
+
+
+def _build_with(cache: Path, out: Path, *areas: str) -> dict:  # type: ignore[type-arg]
+    argv = ["build", "--cache", str(cache), "--release", "2026-11", "--out", str(out)]
+    argv += ["--router", "fake", "--built-at", BUILT_AT]
+    if areas:
+        argv += ["--areas", *areas]
+    assert cli.run(argv, config=_services_config()) == 0
+    return json.loads((out / "manifest.json").read_text())  # type: ignore[no-any-return]
+
+
+def _save_snapshot(cache: Path) -> None:
+    listed = {"FA002": frozenset({"SRV0274"}), "FA001": frozenset(), "FZZZZ": frozenset()}
+    save_snapshot(
+        Snapshot("2026-11-01T00:00:00Z", "https://api.service.nhs.uk/service-search-api/", listed),
+        cache / cli.SERVICES_FILE,
+    )
+
+
+def test_build_with_snapshot_writes_services(tmp_path: Path) -> None:
+    cache = make_cache(tmp_path)
+    _save_snapshot(cache)
+    manifest = _build_with(cache, tmp_path / "out", "E06000050")
+    assert manifest["config"]["services"] == [
+        {
+            "key": "nsp",
+            "name": "Needle exchange",
+            "nations": ["England"],
+            "source": SERVICES_ATTRIBUTION,
+            "source_fetched_at": "2026-11-01T00:00:00Z",
+        }
+    ]
+    assert manifest["config"]["service_min"] == 5
+    assert manifest["services"] == {"nsp": {"listed": 1, "unmatched_dohs": 1, "missing_dohs": 0}}
+    assert SERVICES_ATTRIBUTION in manifest["attribution"]
+    with gzip.open(tmp_path / "out" / "pharmacies.csv.gz", "rt") as f:
+        rows = list(csv.reader(f))
+    assert rows[0][-1] == "services"
+    cells = {r[2]: r[-1] for r in rows[1:]}
+    assert cells["FA002"] == "nsp" and cells["FA001"] == ""
+    assert all(v == "nsp?" for k, v in cells.items() if k not in ("FA002", "FA001"))
+
+
+def test_build_without_snapshot_has_empty_services(tmp_path: Path) -> None:
+    manifest = _build(make_cache(tmp_path), tmp_path / "out")
+    assert manifest["config"]["services"] == [] and manifest["services"] == {}
+    assert SERVICES_ATTRIBUTION not in manifest["attribution"]
+    with gzip.open(tmp_path / "out" / "pharmacies.csv.gz", "rt") as f:
+        assert {r[-1] for r in list(csv.reader(f))[1:]} == {""}
+
+
+def test_build_enabled_without_snapshot_fails(tmp_path: Path) -> None:
+    cache = make_cache(tmp_path)
+    with pytest.raises(FileNotFoundError, match="fetch-services"):
+        _build_with(cache, tmp_path / "out")
+
+
+def test_merge_keeps_services_fields(tmp_path: Path) -> None:
+    cache = make_cache(tmp_path)
+    _save_snapshot(cache)
+    _build_with(cache, tmp_path / "s1", "E06000050")
+    _build_with(cache, tmp_path / "s2", "S12000049", "W11000023")
+    base = _build_with(cache, tmp_path / "merged")
+    assert (
+        cli.run(
+            ["merge", "--out", str(tmp_path / "merged"), str(tmp_path / "s1"), str(tmp_path / "s2")]
+        )
+        == 0
+    )
+    merged = json.loads((tmp_path / "merged" / "manifest.json").read_text())
+    for key in ("services", "attribution"):
+        assert merged[key] == base[key]
+    assert merged["config"]["services"] == base["config"]["services"]
+    assert merged["config"]["service_min"] == base["config"]["service_min"]

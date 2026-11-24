@@ -25,6 +25,10 @@ ATTRIBUTION = [
     "Travel distances and times derived from map data © OpenStreetMap contributors, "
     "available under the Open Database Licence (ODbL).",
 ]
+SERVICES_ATTRIBUTION = (
+    "Contains information from NHS England, licensed under the current version of the "
+    "Open Government Licence."
+)
 
 
 @dataclass(frozen=True)
@@ -71,8 +75,19 @@ def _day_cell(day: DayHours) -> str:
     return ";".join(f"{opens}-{closes}" for opens, closes in day)
 
 
-def write_directory(out: Path, pharmacies: Sequence[Pharmacy]) -> FileInfo:
-    header = ["ph_idx", "nation", "code", "name", "address", "postcode", "lat", "lon", *WEEKDAYS]
+def write_directory(out: Path, pharmacies: Sequence[Pharmacy], services: Sequence[str]) -> FileInfo:
+    header = [
+        "ph_idx",
+        "nation",
+        "code",
+        "name",
+        "address",
+        "postcode",
+        "lat",
+        "lon",
+        *WEEKDAYS,
+        "services",
+    ]
     rows = []
     for idx, p in enumerate(pharmacies):
         hours = p.raw.hours
@@ -88,6 +103,7 @@ def write_directory(out: Path, pharmacies: Sequence[Pharmacy]) -> FileInfo:
                 f"{p.lat:.6f}",
                 f"{p.lon:.6f}",
                 *days,
+                services[idx],
             ]
         )
     return _write_gz_csv(out, "pharmacies.csv.gz", header, rows)

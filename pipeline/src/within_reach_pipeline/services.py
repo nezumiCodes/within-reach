@@ -3,14 +3,16 @@
 import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import httpx
 
+from within_reach_pipeline.config import ServiceDef
 from within_reach_pipeline.http import Fetcher
+from within_reach_pipeline.models import Pharmacy
 
 log = logging.getLogger("within_reach_pipeline")
 
@@ -93,3 +95,50 @@ def load_snapshot(path: Path) -> Snapshot | None:
         api_base=body["api_base"],
         listed={code: frozenset(codes) for code, codes in body["listed"].items()},
     )
+
+
+@dataclass(frozen=True)
+class ServiceAssignment:
+    cells: list[str]  # indexed by ph_idx
+    listed: dict[str, frozenset[int]]  # service key -> ph_idx values that list it
+    counts: dict[str, dict[str, int]]  # service key -> listed / unmatched_dohs / missing_dohs
+
+
+def assign_services(
+    pharmacies: Sequence[Pharmacy], defs: Sequence[ServiceDef], snapshot: Snapshot | None
+) -> ServiceAssignment:
+    """The `services` cell of every pharmacy: `key` listed, `key?` not known, absent not listed.
+
+    A pharmacy is known only where DoHS covers its nation and holds a record for its code.
+    """
+    if snapshot is None or not defs:
+        return ServiceAssignment([""] * len(pharmacies), {}, {})
+    cells: list[list[str]] = [[] for _ in pharmacies]
+    listed: dict[str, frozenset[int]] = {}
+    counts: dict[str, dict[str, int]] = {}
+    for d in defs:
+        in_nations = {i for i, p in enumerate(pharmacies) if p.raw.nation in d.nations}
+        matched: set[str] = set()
+        hits: set[int] = set()
+        missing = 0
+        for i, p in enumerate(pharmacies):
+            if i not in in_nations:
+                cells[i].append(f"{d.key}?")
+                continue
+            code = p.raw.code.upper()
+            codes = snapshot.listed.get(code)
+            if codes is None:
+                cells[i].append(f"{d.key}?")
+                missing += 1
+                continue
+            matched.add(code)
+            if d.code in codes:
+                cells[i].append(d.key)
+                hits.add(i)
+        listed[d.key] = frozenset(hits)
+        counts[d.key] = {
+            "listed": len(hits),
+            "unmatched_dohs": len(set(snapshot.listed) - matched),
+            "missing_dohs": missing,
+        }
+    return ServiceAssignment([";".join(c) for c in cells], listed, counts)

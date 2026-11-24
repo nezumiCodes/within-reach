@@ -3,17 +3,19 @@ import logging
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 import pytest
 from fakes import FIXTURES
 
 from within_reach_pipeline.cli import SERVICES_FILE, run
-from within_reach_pipeline.config import DEFAULT_CONFIG, load_config
+from within_reach_pipeline.config import DEFAULT_CONFIG, ServiceDef, load_config
+from within_reach_pipeline.models import Pharmacy, RawPharmacy
 from within_reach_pipeline.services import (
     ServicesFetchError,
     Snapshot,
+    assign_services,
     fetch_snapshot,
     load_snapshot,
     save_snapshot,
@@ -150,3 +152,55 @@ def test_explicit_config_beats_env_var(tmp_path: Path) -> None:
     env: Mapping[str, str] = {"WITHIN_REACH_CONFIG": str(config_path)}
     assert run(["fetch-services", "--cache", str(tmp_path)], env=env, config=disabled) == 0
     assert not (tmp_path / SERVICES_FILE).exists()
+
+
+NSP = ServiceDef("nsp", "Needle exchange", "SRV0274", ("England",))
+
+
+def _ph(nation: Literal["England", "Scotland", "Wales"], code: str) -> Pharmacy:
+    return Pharmacy(RawPharmacy(nation, code, "N", ("A",), "AB1 1AA", None), 53.0, -2.0, 1, 1)
+
+
+def _assignment_inputs() -> tuple[list[Pharmacy], Snapshot]:
+    pharmacies = [
+        _ph("England", "FA001"),  # listed
+        _ph("England", "fa002"),  # in DoHS, not listed (code case differs)
+        _ph("England", "FA003"),  # not in DoHS
+        _ph("Scotland", "S1"),
+        _ph("Wales", "W1"),
+    ]
+    snapshot = Snapshot(
+        "2026-11-01T00:00:00Z",
+        "https://x/",
+        {
+            "FA001": frozenset({"SRV0274", "SRV1"}),
+            "FA002": frozenset({"SRV1"}),
+            "FZZZZ": frozenset({"SRV0274"}),  # no NHSBSA match
+        },
+    )
+    return pharmacies, snapshot
+
+
+def test_assign_services_cells() -> None:
+    pharmacies, snapshot = _assignment_inputs()
+    a = assign_services(pharmacies, [NSP], snapshot)
+    assert a.cells == ["nsp", "", "nsp?", "nsp?", "nsp?"]
+    assert a.listed == {"nsp": frozenset({0})}
+    assert a.counts == {"nsp": {"listed": 1, "unmatched_dohs": 1, "missing_dohs": 1}}
+
+
+def test_assign_services_joins_several_keys() -> None:
+    pharmacies, snapshot = _assignment_inputs()
+    other = ServiceDef("oth", "Other", "SRV1", ("England",))
+    a = assign_services(pharmacies, [NSP, other], snapshot)
+    assert a.cells[:2] == ["nsp;oth", "oth"]
+
+
+def test_assign_services_off() -> None:
+    pharmacies, snapshot = _assignment_inputs()
+    for a in (
+        assign_services(pharmacies, [NSP], None),
+        assign_services(pharmacies, [], snapshot),
+    ):
+        assert a.cells == [""] * 5
+        assert a.listed == {} and a.counts == {}

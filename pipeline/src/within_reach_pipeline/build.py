@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 from within_reach_pipeline.bundle import (
     ATTRIBUTION,
+    SERVICES_ATTRIBUTION,
     write_area,
     write_directory,
     write_district_index,
@@ -30,6 +31,7 @@ from within_reach_pipeline.reach import route_reachable
 from within_reach_pipeline.routing import WALK_PROFILE, Router, TravelRow
 from within_reach_pipeline.routing.fake import FakeRouter
 from within_reach_pipeline.routing.osrm import BBox, area_bbox
+from within_reach_pipeline.services import assign_services, load_snapshot
 
 log = logging.getLogger(__name__)
 RouterKind = Literal["osrm", "fake"]
@@ -99,6 +101,7 @@ def build_release(
         ODS_WALES_FILE,
         ONSPD_DIR,
         PHS_FILE,
+        SERVICES_FILE,
         onspd_csv,
     )
 
@@ -122,7 +125,16 @@ def build_release(
     )
 
     out.mkdir(parents=True, exist_ok=True)
-    directory_info = write_directory(out, pharmacies)
+    snapshot = None
+    if config.services_enabled:
+        snapshot = load_snapshot(cache / SERVICES_FILE)
+        if snapshot is None:
+            raise FileNotFoundError(
+                f"services are enabled but {cache / SERVICES_FILE} is missing: "
+                "run fetch-services first"
+            )
+    assignment = assign_services(pharmacies, config.services, snapshot)
+    directory_info = write_directory(out, pharmacies, assignment.cells)
     districts_info = write_district_index(out, postcodes)
     names = read_area_names(cache / ONSPD_DIR / "Documents")
 
@@ -215,8 +227,24 @@ def build_release(
             "cycle_note_min_extra_m": config.cycle_note_min_extra_m,
             "router": router,
             "maps": maps,
+            "services": [
+                {
+                    "key": d.key,
+                    "name": d.name,
+                    "nations": list(d.nations),
+                    "source": SERVICES_ATTRIBUTION,
+                    "source_fetched_at": snapshot.fetched_at,
+                }
+                for d in config.services
+            ]
+            if snapshot is not None
+            else [],
+            "service_min": config.service_min if snapshot is not None else 0,
         },
-        "attribution": ATTRIBUTION,
+        "attribution": [*ATTRIBUTION, SERVICES_ATTRIBUTION]
+        if snapshot is not None
+        else ATTRIBUTION,
+        "services": assignment.counts,
         "directory": {**directory_info.as_dict(), "count_by_nation": count_by_nation},
         "districts": districts_info.as_dict(),
         "geocode_failures": [
