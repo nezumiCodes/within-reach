@@ -75,3 +75,17 @@ def test_default_client_connects_over_ipv4_only() -> None:
 
     transport = HttpxFetcher("test-agent")._client._transport
     assert transport._pool._local_address == "0.0.0.0"  # type: ignore[attr-defined]  # noqa: S104
+
+
+def test_get_json_sends_extra_headers() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["apikey"] = request.headers.get("apikey", "")
+        seen["ua"] = request.headers["User-Agent"]
+        seen["accept"] = request.headers["Accept"]
+        return httpx.Response(200, json={})
+
+    fetcher = HttpxFetcher(UA, transport=httpx.MockTransport(handler))
+    fetcher.get_json("https://example.test", headers={"apikey": "k"})
+    assert seen == {"apikey": "k", "ua": UA, "accept": "application/json"}

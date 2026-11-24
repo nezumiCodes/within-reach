@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from within_reach_pipeline.config import load_config
+from within_reach_pipeline.config import ServiceDef, load_config
 
 CONFIG = Path(__file__).resolve().parents[1] / "config.toml"
 
@@ -30,3 +30,16 @@ def test_cycle_and_reach_settings_load() -> None:
         25000,
         4,
     )
+
+
+def test_services_config_loads() -> None:
+    config = load_config(CONFIG)
+    assert config.services_enabled is False
+    assert config.service_min == 5
+    assert config.services == (ServiceDef("nsp", "Needle exchange", "SRV0274", ("England",)),)
+    assert config.services_api_base == "https://api.service.nhs.uk/service-search-api/"
+    assert (
+        config.services_min_listed,
+        config.services_listed_tolerance,
+        config.services_max_missing_share,
+    ) == (1000, 0.20, 0.10)

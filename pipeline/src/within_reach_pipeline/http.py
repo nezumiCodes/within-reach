@@ -9,7 +9,12 @@ import httpx
 
 
 class Fetcher(Protocol):
-    def get_json(self, url: str, params: dict[str, str] | None = None) -> Any: ...
+    def get_json(
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> Any: ...
 
     def get_text(self, url: str) -> str: ...
 
@@ -39,9 +44,13 @@ class HttpxFetcher:
         self._backoff_s = backoff_s
 
     def _get(
-        self, url: str, params: dict[str, str] | None = None, accept: str | None = None
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        accept: str | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> httpx.Response:
-        headers = {"Accept": accept} if accept else None
+        headers = {**({"Accept": accept} if accept else {}), **(extra_headers or {})} or None
         for attempt in range(1, self._retries + 1):
             try:
                 response = self._client.get(url, params=params, headers=headers)
@@ -56,9 +65,14 @@ class HttpxFetcher:
             time.sleep(self._backoff_s * 2 ** (attempt - 1))
         raise RuntimeError("unreachable")
 
-    def get_json(self, url: str, params: dict[str, str] | None = None) -> Any:
+    def get_json(
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> Any:
         # Some APIs (NHS ODS) answer 406 unless JSON is requested explicitly.
-        return self._get(url, params, accept="application/json").json()
+        return self._get(url, params, accept="application/json", extra_headers=headers).json()
 
     def get_text(self, url: str) -> str:
         return self._get(url).text
