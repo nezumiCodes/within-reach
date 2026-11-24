@@ -1,11 +1,11 @@
 <script lang="ts">
   /** Sort and filter controls (Phase 2 design, section 5). */
-  import type { FilterKey, Filters } from '../engine/hours'
+  import type { Filters, HoursKey } from '../engine/hours'
   import type { SortMode } from '../engine/results'
 
   let { mode = $bindable(), filters = $bindable() }: { mode: SortMode; filters: Filters } = $props()
 
-  const FILTER_LABELS: [FilterKey, string][] = [
+  const FILTER_LABELS: [HoursKey, string][] = [
     ['saturday', 'Open Saturday'],
     ['sunday', 'Open Sunday'],
     ['late', 'Open late'],

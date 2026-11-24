@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { NO_FILTERS, parseDay } from './hours'
-import { buildResults, groupByFilters, hiddenSummary, sortResults, type Result } from './results'
-import type { Nation, Pharmacy, TravelRow } from './types'
+import {
+  buildResults,
+  groupByFilters,
+  hiddenSummary,
+  noResultsMessage,
+  sortResults,
+  type Result,
+} from './results'
+import type { Nation, Pharmacy, ServiceState, TravelRow } from './types'
 
 const WEEKDAY = '09:00-17:30'
 
@@ -10,6 +17,7 @@ function pharmacy(
   sat = 'CLOSED',
   sun = 'CLOSED',
   nation: Nation = 'England',
+  services: Record<string, ServiceState> = {},
 ): Pharmacy {
   return {
     idx,
@@ -21,13 +29,16 @@ function pharmacy(
     lat: 53.19,
     lon: -2.89,
     days: [WEEKDAY, WEEKDAY, WEEKDAY, WEEKDAY, WEEKDAY, sat, sun].map(parseDay),
-    services: {},
+    services,
   }
 }
 
 function result(p: Pharmacy, walkM: number | null, driveS: number | null, straightM = 100): Result {
   return { pharmacy: p, straightM, walkM, walkS: walkM, driveS, walkCycle: false }
 }
+
+const NAMES = { nsp: 'Needle exchange' }
+const NSP = { ...NO_FILTERS, services: { nsp: true } }
 
 const codes = (rs: Result[]): string[] => rs.map((r) => r.pharmacy.code)
 
@@ -97,7 +108,12 @@ describe('groupByFilters', () => {
 
   it('shows everything as matches with no filters', () => {
     const rs = [result(pharmacy(1, '', ''), 100, 1)]
-    expect(groupByFilters(rs, NO_FILTERS)).toEqual({ matches: rs, unknown: [], hidden: [] })
+    expect(groupByFilters(rs, NO_FILTERS)).toEqual({
+      matches: rs,
+      unknown: [],
+      unknownOf: new Set(),
+      hidden: [],
+    })
   })
 })
 
@@ -109,7 +125,9 @@ describe('hiddenSummary', () => {
       result(pharmacy(3, 'CLOSED', '10:00-16:00'), 300, 1),
     ]
     const grouped = groupByFilters(rs, { ...NO_FILTERS, sunday: true })
-    expect(hiddenSummary(grouped, 'walk')).toBe('1 closer pharmacy hidden: not open on Sundays.')
+    expect(hiddenSummary(grouped, 'walk', NAMES)).toBe(
+      '1 closer pharmacy hidden: not open on Sundays.',
+    )
   })
 
   it('joins reasons with or', () => {
@@ -131,14 +149,16 @@ describe('hiddenSummary', () => {
       late: true,
     })
     expect(grouped.hidden).toHaveLength(6)
-    expect(hiddenSummary(grouped, 'walk')).toBe(
+    expect(hiddenSummary(grouped, 'walk', NAMES)).toBe(
       '6 pharmacies hidden: not open on Saturdays or not open late.',
     )
   })
 
   it('says closer when nothing is shown', () => {
     const grouped = groupByFilters([result(pharmacy(1), 100, 1)], { ...NO_FILTERS, sunday: true })
-    expect(hiddenSummary(grouped, 'walk')).toBe('1 closer pharmacy hidden: not open on Sundays.')
+    expect(hiddenSummary(grouped, 'walk', NAMES)).toBe(
+      '1 closer pharmacy hidden: not open on Sundays.',
+    )
   })
 
   it('compares against the last unknown entry when there is one', () => {
@@ -148,11 +168,94 @@ describe('hiddenSummary', () => {
       result(pharmacy(3, 'CLOSED', ''), 300, 1),
     ]
     const grouped = groupByFilters(rs, { ...NO_FILTERS, sunday: true })
-    expect(hiddenSummary(grouped, 'walk')).toBe('1 closer pharmacy hidden: not open on Sundays.')
+    expect(hiddenSummary(grouped, 'walk', NAMES)).toBe(
+      '1 closer pharmacy hidden: not open on Sundays.',
+    )
   })
 
   it('is null with nothing hidden', () => {
     const grouped = groupByFilters([result(pharmacy(1), 100, 1)], NO_FILTERS)
-    expect(hiddenSummary(grouped, 'walk')).toBeNull()
+    expect(hiddenSummary(grouped, 'walk', NAMES)).toBeNull()
+  })
+})
+
+describe('service filters in results', () => {
+  const listed = (i: number) => pharmacy(i, 'CLOSED', '10:00-16:00', 'England', { nsp: 'listed' })
+
+  it('groups listed, not-known and not-listed pharmacies, recording what is unknown', () => {
+    const rs = [
+      result(pharmacy(1), 100, 1),
+      result(pharmacy(2, 'CLOSED', 'CLOSED', 'Wales', { nsp: 'unknown' }), 200, 1),
+      result(listed(3), 300, 1),
+    ]
+    const grouped = groupByFilters(rs, NSP)
+    expect(codes(grouped.matches)).toEqual(['F003'])
+    expect(codes(grouped.unknown)).toEqual(['F002'])
+    expect([...grouped.unknownOf]).toEqual(['services'])
+    expect(grouped.hidden.map((h) => [h.result.pharmacy.code, h.reasons])).toEqual([
+      ['F001', ['service:nsp']],
+    ])
+  })
+
+  it('summarises pharmacies not listed for the service', () => {
+    const rs = [1, 2, 3].map((i) => result(pharmacy(i), 100 * i, 1))
+    rs.push(result(listed(4), 400, 1))
+    expect(hiddenSummary(groupByFilters(rs, NSP), 'walk', NAMES)).toBe(
+      '3 closer pharmacies hidden: not listed for needle exchange.',
+    )
+  })
+
+  it('combines hours and service reasons, hours first', () => {
+    const rs = [
+      result(pharmacy(1, 'CLOSED', 'CLOSED'), 100, 1),
+      result(listed(2), 200, 1),
+      result(pharmacy(3, 'CLOSED', '10:00-16:00'), 300, 1),
+    ]
+    const grouped = groupByFilters(rs, { ...NSP, sunday: true })
+    expect(hiddenSummary(grouped, 'walk', NAMES)).toBe(
+      '2 closer pharmacies hidden: not open on Sundays or not listed for needle exchange.',
+    )
+  })
+})
+
+describe('noResultsMessage', () => {
+  const only = [1, 2].map((i) => result(pharmacy(i), 100 * i, 1))
+
+  it('says no pharmacies list the service when none do', () => {
+    expect(noResultsMessage(only, NSP, NAMES, 25000)).toBe(
+      'No pharmacies listing needle exchange were found within 25 km.',
+    )
+  })
+
+  it('joins several service names with or', () => {
+    const names = { nsp: 'Needle exchange', xyz: 'Other service' }
+    const f = { ...NO_FILTERS, services: { nsp: true, xyz: true } }
+    expect(noResultsMessage(only, f, names, 25000)).toBe(
+      'No pharmacies listing needle exchange or other service were found within 25 km.',
+    )
+  })
+
+  it('keeps the hours message when pharmacies pass the service filter', () => {
+    const rs = [result(pharmacy(1, 'CLOSED', 'CLOSED', 'England', { nsp: 'listed' }), 100, 1)]
+    expect(noResultsMessage(rs, { ...NSP, sunday: true }, NAMES, 25000)).toBe(
+      'No pharmacies nearby match these filters.',
+    )
+  })
+
+  it('treats a not-known service as passing', () => {
+    const rs = [result(pharmacy(1, 'CLOSED', 'CLOSED', 'Wales', { nsp: 'unknown' }), 100, 1)]
+    expect(noResultsMessage(rs, NSP, NAMES, 25000)).toBe(
+      'No pharmacies nearby match these filters.',
+    )
+  })
+
+  it('keeps the hours message with only hours filters', () => {
+    expect(noResultsMessage(only, { ...NO_FILTERS, sunday: true }, NAMES, 25000)).toBe(
+      'No pharmacies nearby match these filters.',
+    )
+  })
+
+  it('falls back to 25 km for an unusable reach', () => {
+    expect(noResultsMessage(only, NSP, NAMES, 0)).toContain('within 25 km.')
   })
 })

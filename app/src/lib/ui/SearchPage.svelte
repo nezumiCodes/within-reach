@@ -7,7 +7,7 @@
   import { DownloadError, IntegrityError, SessionFiles } from '../data/files'
   import { formatRelease, loadManifest, type Manifest } from '../data/release'
   import { Searcher, type SearchOutcome } from '../data/search'
-  import { NO_FILTERS, type Filters } from '../engine/hours'
+  import { anyFilter, NO_FILTERS, type Filters } from '../engine/hours'
   import { groupByFilters, hiddenSummary, sortResults, type SortMode } from '../engine/results'
   import Controls from './Controls.svelte'
   import MapPanel from './MapPanel.svelte'
@@ -25,7 +25,7 @@
   let busy = $state(false)
   let lastQuery = ''
   let mode = $state<SortMode>('walk')
-  let filters = $state<Filters>({ ...NO_FILTERS })
+  let filters = $state<Filters>({ ...NO_FILTERS, services: {} })
   let visible = $state(PAGE)
   let selected = $state<number | null>(null)
   let highlighted = $state<number | null>(null)
@@ -73,15 +73,18 @@
   const found = $derived(outcome?.kind === 'found' ? outcome : null)
   const sorted = $derived(found ? sortResults(found.results, mode) : [])
   const grouped = $derived(groupByFilters(sorted, filters))
-  const anyFilter = $derived(filters.saturday || filters.sunday || filters.late)
+  const filtering = $derived(anyFilter(filters))
   const listed = $derived([...grouped.matches, ...grouped.unknown])
   const shown = $derived(listed.slice(0, visible))
   const unknownStartsAt = $derived(
-    anyFilter && grouped.unknown.length > 0 && grouped.matches.length < shown.length
+    filtering && grouped.unknown.length > 0 && grouped.matches.length < shown.length
       ? grouped.matches.length
       : null,
   )
-  const summary = $derived(hiddenSummary(grouped, mode))
+  const serviceNames = $derived(
+    Object.fromEntries((manifest?.services ?? []).map((s) => [s.key, s.name])),
+  )
+  const summary = $derived(hiddenSummary(grouped, mode, serviceNames))
 
   const message = $derived.by(() => {
     if (busy) return 'Searching…'
