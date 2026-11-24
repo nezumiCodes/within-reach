@@ -220,7 +220,7 @@ def _build_with(cache: Path, out: Path, *areas: str) -> dict:  # type: ignore[ty
 
 
 def _save_snapshot(cache: Path) -> None:
-    listed = {"FA002": frozenset({"SRV0274"}), "FA001": frozenset(), "FZZZZ": frozenset()}
+    listed = {"FA002": frozenset({"SRV0274"}), "FZZZZ": frozenset()}  # FA001 has no DoHS record
     save_snapshot(
         Snapshot("2026-11-01T00:00:00Z", "https://api.service.nhs.uk/service-search-api/", listed),
         cache / cli.SERVICES_FILE,
@@ -241,7 +241,7 @@ def test_build_with_snapshot_writes_services(tmp_path: Path) -> None:
         }
     ]
     assert manifest["config"]["service_min"] == 5
-    assert manifest["services"] == {"nsp": {"listed": 1, "unmatched_dohs": 1, "missing_dohs": 0}}
+    assert manifest["services"] == {"nsp": {"listed": 1, "unmatched_dohs": 1, "missing_dohs": 1}}
     assert SERVICES_ATTRIBUTION in manifest["attribution"]
     with gzip.open(tmp_path / "out" / "pharmacies.csv.gz", "rt") as f:
         rows = list(csv.reader(f))

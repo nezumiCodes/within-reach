@@ -109,7 +109,8 @@ def assign_services(
 ) -> ServiceAssignment:
     """The `services` cell of every pharmacy: `key` listed, `key?` not known, absent not listed.
 
-    A pharmacy is known only where DoHS covers its nation and holds a record for its code.
+    Pharmacies in a nation the service does not cover are unknown. English pharmacies with no
+    DoHS record are not listed (empty cell), but are counted in `missing_dohs`.
     """
     if snapshot is None or not defs:
         return ServiceAssignment([""] * len(pharmacies), {}, {})
@@ -128,8 +129,7 @@ def assign_services(
             code = p.raw.code.upper()
             codes = snapshot.listed.get(code)
             if codes is None:
-                cells[i].append(f"{d.key}?")
-                missing += 1
+                missing += 1  # no DoHS record: counted, and treated as not listed
                 continue
             matched.add(code)
             if d.code in codes:

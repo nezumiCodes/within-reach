@@ -165,7 +165,7 @@ def _assignment_inputs() -> tuple[list[Pharmacy], Snapshot]:
     pharmacies = [
         _ph("England", "FA001"),  # listed
         _ph("England", "fa002"),  # in DoHS, not listed (code case differs)
-        _ph("England", "FA003"),  # not in DoHS
+        _ph("England", "FA003"),  # no DoHS record: treated as not listed
         _ph("Scotland", "S1"),
         _ph("Wales", "W1"),
     ]
@@ -184,7 +184,7 @@ def _assignment_inputs() -> tuple[list[Pharmacy], Snapshot]:
 def test_assign_services_cells() -> None:
     pharmacies, snapshot = _assignment_inputs()
     a = assign_services(pharmacies, [NSP], snapshot)
-    assert a.cells == ["nsp", "", "nsp?", "nsp?", "nsp?"]
+    assert a.cells == ["nsp", "", "", "nsp?", "nsp?"]
     assert a.listed == {"nsp": frozenset({0})}
     assert a.counts == {"nsp": {"listed": 1, "unmatched_dohs": 1, "missing_dohs": 1}}
 
