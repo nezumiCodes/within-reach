@@ -1,6 +1,10 @@
 # Hand-checked reference postcodes (Task 10). See README.md in this folder.
 # nearest: the 3 nearest pharmacies on foot, in any order. walk_m_range: the
 # shortest walk, +/-15% of the November 2026 value.
+#
+# A service case has `service` (a configured key), `min_rows` and `beyond_m` instead of (or as
+# well as) the above: the postcode needs at least min_rows travel rows listing that service with
+# straight_m > beyond_m and a walk or drive route.
 
 [[case]]
 # Chester centre: Superdrug Pharmacy CH1 2HA 70 m; Boots CH1 1NA 362 m; Tesco Instore Pharmacy CH1 3JS 453 m

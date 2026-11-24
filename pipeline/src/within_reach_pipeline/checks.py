@@ -211,14 +211,79 @@ def _check_counts(
     return failures
 
 
+def _check_services(
+    release: Path, manifest: dict[str, Any], config: PipelineConfig
+) -> list[CheckFailure]:
+    """Service data is plausible and every `services` cell holds only configured keys.
+
+    With services off every cell is empty and the manifest has no service counts.
+    """
+    keys = {d.key for d in config.services} if config.services_enabled else set()
+    failures: list[CheckFailure] = []
+    bad_cells: set[str] = set()
+    for row in _rows(release / manifest["directory"]["path"]):
+        for value in filter(None, row["services"].split(";")):
+            if value.removesuffix("?") not in keys:
+                bad_cells.add(value)
+    if bad_cells:
+        failures.append(
+            CheckFailure("services", f"unexpected services cell values: {sorted(bad_cells)}")
+        )
+    counts = manifest.get("services", {})
+    if not keys:
+        if counts:
+            failures.append(CheckFailure("services", "service counts present with services off"))
+        return failures
+    england = manifest["directory"]["count_by_nation"].get("England", 0)
+    for key in sorted(keys):
+        entry = counts.get(key)
+        if entry is None:
+            failures.append(CheckFailure("services", f"{key}: no counts in the manifest"))
+            continue
+        if entry["listed"] < config.services_min_listed:
+            failures.append(
+                CheckFailure(
+                    "services",
+                    f"{key}: {entry['listed']} pharmacies listed,"
+                    f" need {config.services_min_listed}",
+                )
+            )
+        if entry["missing_dohs"] >= config.services_max_missing_share * england:
+            failures.append(
+                CheckFailure(
+                    "services",
+                    f"{key}: {entry['missing_dohs']} of {england} English pharmacies"
+                    " have no DoHS record",
+                )
+            )
+    return failures
+
+
+def _check_service_counts(
+    manifest: dict[str, Any], previous: dict[str, Any], tolerance: float
+) -> list[CheckFailure]:
+    """Listed counts stay within tolerance of the previous release, per service in both."""
+    now, before = manifest.get("services", {}), previous.get("services", {})
+    return [
+        CheckFailure(
+            "service_counts", f"{key} listed {before[key]['listed']} -> {now[key]['listed']}"
+        )
+        for key in sorted(now.keys() & before.keys())
+        if not _within(now[key]["listed"], before[key]["listed"], tolerance)
+    ]
+
+
 def _check_reference(
     release: Path, manifest: dict[str, Any], reference: Path
 ) -> list[CheckFailure]:
     cases = tomllib.loads(reference.read_text(encoding="utf-8")).get("case", [])
-    directory = {
-        row["ph_idx"]: f"{row['nation']}:{row['code']}"
-        for row in _rows(release / manifest["directory"]["path"])
-    }
+    directory: dict[str, str] = {}
+    listing: dict[str, set[str]] = {}  # service key -> ph_idx values that list it
+    for row in _rows(release / manifest["directory"]["path"]):
+        directory[row["ph_idx"]] = f"{row['nation']}:{row['code']}"
+        for key in filter(None, row["services"].split(";")):
+            if not key.endswith("?"):
+                listing.setdefault(key, set()).add(row["ph_idx"])
     failures: list[CheckFailure] = []
     for case in cases:
         postcode = case["postcode"]
@@ -239,6 +304,25 @@ def _check_reference(
             # A partial release (reference areas only) can't answer cases elsewhere.
             if manifest.get("complete", True):
                 failures.append(CheckFailure("reference", f"{postcode}: not in any built area"))
+            continue
+        if "service" in case:
+            members = listing.get(case["service"], set())
+            found = sum(
+                1
+                for r in travel
+                if r["ph_idx"] in members
+                and int(r["straight_m"]) > case["beyond_m"]
+                and (r["walk_m"] or r["drive_s"])
+            )
+            if found < case["min_rows"]:
+                failures.append(
+                    CheckFailure(
+                        "reference",
+                        f"{postcode}: {found} routed {case['service']} rows beyond"
+                        f" {case['beyond_m']} m, need {case['min_rows']}",
+                    )
+                )
+        if "nearest" not in case:
             continue
         # Travel rows are stored in straight-line order; the reference is about walking.
         # Rows without a walking route sort last. Order within the top N is not compared,
@@ -321,6 +405,7 @@ def run_checks(
     failures += _check_manifest_fields(manifest)
     failures += _check_geocode(manifest, config.geocode_failure_limit)
     failures += _check_distance_selling(manifest, config)
+    failures += _check_services(release_dir, manifest, config)
     if manifest["config"].get("maps") == "tilemaker":
         failures += _check_maps(release_dir, manifest)
     if not allow_partial:
@@ -328,6 +413,7 @@ def run_checks(
     if previous_dir is not None:
         previous = json.loads((previous_dir / "manifest.json").read_text(encoding="utf-8"))
         failures += _check_counts(manifest, previous, config.count_tolerance)
+        failures += _check_service_counts(manifest, previous, config.services_listed_tolerance)
     if reference is not None:
         failures += _check_reference(release_dir, manifest, reference)
     return failures

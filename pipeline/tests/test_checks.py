@@ -1,6 +1,8 @@
+import csv
 import dataclasses
 import gzip
 import hashlib
+import io
 import json
 import struct
 from pathlib import Path
@@ -463,3 +465,148 @@ def test_reference_case_missing_from_a_complete_release_fails(tmp_path: Path) ->
     release = _release(tmp_path)
     reference = _reference_for(tmp_path, "ZZ9 9ZZ")
     assert _only(run_checks(release, CONFIG, None, reference)) == "reference"
+
+
+# --- Service data ---
+
+SERVICES_CONFIG = dataclasses.replace(CONFIG, services_enabled=True)
+NSP = {"listed": 1200, "unmatched_dohs": 3, "missing_dohs": 0}
+
+
+def _edit_directory(release: Path, edit) -> None:  # type: ignore[no-untyped-def]
+    """Rewrite the pharmacy file's rows and keep the manifest checksums valid."""
+    manifest = _manifest(release)
+    entry = manifest["directory"]
+    path = release / entry["path"]
+    text = gzip.decompress(path.read_bytes()).decode()
+    reader = list(csv.reader(io.StringIO(text)))
+    header, rows = reader[0], edit(reader[1:])
+    out = io.StringIO()
+    csv.writer(out, lineterminator="\n").writerows([header, *rows])
+    data = gzip.compress(out.getvalue().encode(), mtime=0)
+    path.write_bytes(data)
+    entry["sha256"], entry["bytes"] = hashlib.sha256(data).hexdigest(), len(data)
+    _save(release, manifest)
+
+
+def _set_cells(release: Path, cell: str, first: int | None = None) -> None:
+    def edit(rows: list[list[str]]) -> list[list[str]]:
+        for r in rows[:first]:
+            r[-1] = cell
+        return rows
+
+    _edit_directory(release, edit)
+
+
+def _service_release(tmp_path: Path, name: str = "rel", cell: str = "nsp", **counts: int) -> Path:
+    """A release as an enabled build would write it: a services manifest and cells."""
+    release = _release(tmp_path, name)
+    manifest = _manifest(release)
+    manifest["services"] = {"nsp": {**NSP, **counts}}
+    _save(release, manifest)
+    _set_cells(release, cell, first=1)
+    return release
+
+
+def test_services_pass_with_listed_and_unknown_cells(tmp_path: Path) -> None:
+    for cell in ("nsp", "nsp?"):
+        release = _service_release(tmp_path, cell=cell)
+        assert run_checks(release, SERVICES_CONFIG, None, None) == []
+
+
+def test_services_listed_below_the_minimum_fails(tmp_path: Path) -> None:
+    release = _service_release(tmp_path, listed=999)
+    assert _only(run_checks(release, SERVICES_CONFIG, None, None)) == "services"
+
+
+def test_services_missing_dohs_at_ten_percent_of_england_fails(tmp_path: Path) -> None:
+    release = _service_release(tmp_path)
+    manifest = _manifest(release)
+    manifest["directory"]["count_by_nation"]["England"] = 100  # the check reads this count
+    manifest["services"]["nsp"]["missing_dohs"] = 9
+    _save(release, manifest)
+    assert run_checks(release, SERVICES_CONFIG, None, None) == []
+    manifest["services"]["nsp"]["missing_dohs"] = 10
+    _save(release, manifest)
+    assert _only(run_checks(release, SERVICES_CONFIG, None, None)) == "services"
+
+
+def test_services_unknown_cell_value_fails(tmp_path: Path) -> None:
+    release = _service_release(tmp_path, cell="xyz")
+    assert _only(run_checks(release, SERVICES_CONFIG, None, None)) == "services"
+    release = _service_release(tmp_path, "other", cell="nsp;xyz?")
+    assert _only(run_checks(release, SERVICES_CONFIG, None, None)) == "services"
+
+
+def test_services_off_needs_empty_cells(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    assert run_checks(release, CONFIG, None, None) == []
+    _set_cells(release, "nsp", first=1)
+    assert _only(run_checks(release, CONFIG, None, None)) == "services"
+
+
+def test_services_missing_from_the_manifest_fails(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    assert _only(run_checks(release, SERVICES_CONFIG, None, None)) == "services"
+
+
+def test_service_listed_count_drop_over_tolerance(tmp_path: Path) -> None:
+    previous = _service_release(tmp_path, "prev", listed=1500)
+    release = _service_release(tmp_path, listed=1100)
+    assert _only(run_checks(release, SERVICES_CONFIG, previous, None)) == "service_counts"
+    near = _service_release(tmp_path, "near", listed=1300)
+    assert run_checks(near, SERVICES_CONFIG, previous, None) == []
+
+
+def test_service_counts_skipped_unless_both_releases_have_the_service(tmp_path: Path) -> None:
+    previous = _release(tmp_path, "prev")  # built with services off
+    release = _service_release(tmp_path)
+    assert run_checks(release, SERVICES_CONFIG, previous, None) == []
+
+
+def _service_reference(tmp_path: Path, beyond_m: int, min_rows: int = 1) -> Path:
+    path = tmp_path / "expectations.toml"
+    path.write_text(
+        '[[case]]\npostcode = "CH1 1AA"\nservice = "nsp"\n'
+        f"min_rows = {min_rows}\nbeyond_m = {beyond_m}\n"
+    )
+    return path
+
+
+def _service_row(release: Path, straight_m: int, walk_m: str) -> None:
+    """Make the postcode's first travel row list the service at the given distance."""
+    _set_cells(release, "nsp", first=None)
+
+    def edit(rows: list[list[str]]) -> list[list[str]]:
+        for r in rows:
+            r[2] = "100"  # the fixture's far pharmacies would otherwise count as beyond
+        rows[0][2], rows[0][3], rows[0][5] = str(straight_m), walk_m, walk_m and "600"
+        return rows
+
+    _edit_travel(release, 0, edit)
+
+
+def test_service_reference_case_needs_a_routed_service_row_beyond_the_distance(
+    tmp_path: Path,
+) -> None:
+    release = _service_release(tmp_path)
+    _service_row(release, 6000, "7500")
+    reference = _service_reference(tmp_path, 5000)
+    assert run_checks(release, SERVICES_CONFIG, None, reference) == []
+    # Not far enough, too few rows, or no route: each fails.
+    assert _only(
+        run_checks(release, SERVICES_CONFIG, None, _service_reference(tmp_path, 6000))
+    ) == ("reference")
+    assert _only(
+        run_checks(release, SERVICES_CONFIG, None, _service_reference(tmp_path, 5000, 2))
+    ) == ("reference")
+    unrouted = _service_release(tmp_path, "unrouted")
+    _service_row(unrouted, 6000, "")
+    assert _only(run_checks(unrouted, SERVICES_CONFIG, None, reference)) == "reference"
+
+
+def test_service_reference_case_ignores_unknown_cells(tmp_path: Path) -> None:
+    release = _service_release(tmp_path, cell="nsp?")
+    _set_cells(release, "nsp?", first=None)
+    _service_row_unknown = _service_reference(tmp_path, 0)
+    assert _only(run_checks(release, SERVICES_CONFIG, None, _service_row_unknown)) == "reference"
