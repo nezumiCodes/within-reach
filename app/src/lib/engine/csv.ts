@@ -3,7 +3,7 @@
  * Each file's header is checked, so a format change fails loudly instead of misreading columns.
  */
 import { parseDay } from './hours'
-import type { Nation, Pharmacy, PostcodeRow, TravelRow } from './types'
+import type { Nation, Pharmacy, PostcodeRow, ServiceState, TravelRow } from './types'
 
 /** RFC 4180 CSV: quoted fields, doubled quotes, LF or CRLF. Drops the header unless asked. */
 export function parseCsv(text: string, options: { header?: boolean } = {}): string[][] {
@@ -82,7 +82,7 @@ export function parseDistricts(text: string): Map<string, string[]> {
   return new Map(rows.map(([outward, areas]) => [outward, areas.split(' ').filter(Boolean)]))
 }
 
-const PHARMACY_COLUMNS = [
+const PHARMACY_COLUMNS_V1 = [
   'ph_idx',
   'nation',
   'code',
@@ -99,9 +99,23 @@ const PHARMACY_COLUMNS = [
   'sat',
   'sun',
 ] as const
+const PHARMACY_COLUMNS = [...PHARMACY_COLUMNS_V1, 'services'] as const
 
+const SERVICE_CELL = /^[a-z0-9_]+\??$/
+
+function services(cell: string): Record<string, ServiceState> {
+  const found: Record<string, ServiceState> = {}
+  if (cell === '') return found
+  for (const part of cell.split(';')) {
+    if (!SERVICE_CELL.test(part)) throw new Error(`not a service: ${part}`)
+    found[part.replace('?', '')] = part.endsWith('?') ? 'unknown' : 'listed'
+  }
+  return found
+}
+
+/** Reads both layouts, so releases from before the services column still load. */
 export function parsePharmacies(text: string): Pharmacy[] {
-  return rowsOf(text, 'pharmacies', PHARMACY_COLUMNS).map((r) => ({
+  return rowsOf(text, 'pharmacies', PHARMACY_COLUMNS_V1, PHARMACY_COLUMNS).map((r) => ({
     idx: int(r[0]),
     nation: nation(r[1]),
     code: r[2],
@@ -111,6 +125,7 @@ export function parsePharmacies(text: string): Pharmacy[] {
     lat: num(r[6]),
     lon: num(r[7]),
     days: r.slice(8, 15).map(parseDay),
+    services: services(r[15] ?? ''),
   }))
 }
 

@@ -66,6 +66,45 @@ describe('parseManifest', () => {
     expect(parsed?.attribution.some((line) => line.includes('OpenStreetMap'))).toBe(true)
   })
 
+  it('manifest services default to none for older releases', () => {
+    const old: unknown = JSON.parse(fixtureManifest)
+    const parsed = parseManifest({ release: '2026-11' }, old)
+    expect(parsed?.services).toEqual([])
+    expect(parsed?.reachCapM).toBe(25000)
+  })
+
+  it('manifest exposes services and the reach cap', () => {
+    const raw = JSON.parse(fixtureManifest) as Record<string, unknown>
+    const withServices = {
+      ...raw,
+      config: {
+        services: [
+          {
+            key: 'nsp',
+            name: 'Needle exchange',
+            code: 'SRV0274',
+            nations: ['England'],
+            source: 'NHS England',
+            source_fetched_at: '2026-11-01T00:00:00Z',
+          },
+        ],
+        service_min: 5,
+        reach_cap_m: 20000,
+      },
+      services: { nsp: { listed: 1200, unmatched_dohs: 3, missing_dohs: 10 } },
+    }
+    const parsed = parseManifest({ release: '2026-11' }, withServices)
+    expect(parsed?.services).toEqual([{ key: 'nsp', name: 'Needle exchange' }])
+    expect(parsed?.reachCapM).toBe(20000)
+  })
+
+  it('rejects a manifest with a malformed service definition', () => {
+    const raw = JSON.parse(fixtureManifest) as Record<string, unknown>
+    expect(
+      parseManifest({ release: '2026-11' }, { ...raw, config: { services: [{ key: 1 }] } }),
+    ).toBeNull()
+  })
+
   it('rejects a manifest with a malformed file reference', () => {
     const bad = {
       release: '2026-11',

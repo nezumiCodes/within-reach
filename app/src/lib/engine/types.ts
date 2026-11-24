@@ -10,6 +10,9 @@ export type Range = { start: number; end: number }
 
 export type DayHours = { kind: 'unknown' } | { kind: 'closed' } | { kind: 'open'; ranges: Range[] }
 
+/** A service the pharmacy lists on its NHS page, or one we have no list for. */
+export type ServiceState = 'listed' | 'unknown'
+
 export type Pharmacy = {
   idx: number
   nation: Nation
@@ -21,6 +24,8 @@ export type Pharmacy = {
   lon: number
   /** Seven entries, Monday first. */
   days: DayHours[]
+  /** By service key; a missing key means not listed. */
+  services: Record<string, ServiceState>
 }
 
 export type PostcodeRow = { idx: number; postcode: string; lat: number; lon: number }

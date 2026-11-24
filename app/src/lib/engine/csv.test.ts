@@ -4,6 +4,11 @@ import { parseCsv, parseDistricts, parsePharmacies, parsePostcodes, parseTravel 
 const PHARMACY_HEADER =
   'ph_idx,nation,code,name,address,postcode,lat,lon,mon,tue,wed,thu,fri,sat,sun'
 
+const withServices = (cells: string[]) =>
+  `${PHARMACY_HEADER},services\n` +
+  cells.map((c, i) => `${i},England,X${i},N,A,CH1 1AA,53,-2,,,,,,,,${c}\n`).join('')
+const oldLayout = `${PHARMACY_HEADER}\n0,England,X0,N,A,CH1 1AA,53,-2,,,,,,,\n`
+
 describe('parseCsv', () => {
   it('handles quotes, commas and doubled quotes', () => {
     expect(parseCsv('a,b\n"x, y","say ""hi"""\n')).toEqual([['x, y', 'say "hi"']])
@@ -113,5 +118,27 @@ describe('release files', () => {
   it('parsePharmacies rejects an unknown nation', () => {
     const row = '0,Atlantis,X1,N,A,CH1 1AA,53,-2,,,,,,,'
     expect(() => parsePharmacies(`${PHARMACY_HEADER}\n${row}\n`)).toThrow()
+  })
+
+  it('reads the services column', () => {
+    const [a, b, c] = parsePharmacies(withServices(['nsp', '', 'nsp?']))
+    expect(a.services).toEqual({ nsp: 'listed' })
+    expect(b.services).toEqual({})
+    expect(c.services).toEqual({ nsp: 'unknown' })
+  })
+
+  it('reads several services in one cell', () => {
+    const [a] = parsePharmacies(withServices(['nsp;abc?']))
+    expect(a.services).toEqual({ nsp: 'listed', abc: 'unknown' })
+  })
+
+  it('still reads the layout without services', () => {
+    expect(parsePharmacies(oldLayout)[0].services).toEqual({})
+  })
+
+  it('rejects a malformed services cell', () => {
+    for (const cell of ['NSP', 'nsp??', 'nsp;', '?', 'n sp']) {
+      expect(() => parsePharmacies(withServices([cell]))).toThrow()
+    }
   })
 })

@@ -21,6 +21,7 @@ function pharmacy(
     lat: 53.19,
     lon: -2.89,
     days: [WEEKDAY, WEEKDAY, WEEKDAY, WEEKDAY, WEEKDAY, sat, sun].map(parseDay),
+    services: {},
   }
 }
 
