@@ -16,7 +16,6 @@ log = logging.getLogger("within_reach_pipeline")
 
 PAGE_SIZE = 1000
 PAGE_PAUSE_S = 1.1  # the API allows one request a second
-SEARCH_PATH = "search"
 
 
 class ServicesFetchError(RuntimeError):
@@ -42,19 +41,20 @@ def fetch_snapshot(
     sleep: Callable[[float], None] = time.sleep,
     now: Callable[[], str] = lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
 ) -> Snapshot:
-    url = api_base.rstrip("/") + "/" + SEARCH_PATH
     listed: dict[str, frozenset[str]] = {}
     skip = 0
     while True:
         params = {
             "api-version": "3",
+            "search": "*",
+            "searchMode": "all",
             "$select": "ODSCode,Services",
             "$filter": "OrganisationTypeId eq 'PHA'",
             "$top": str(PAGE_SIZE),
             "$skip": str(skip),
         }
         try:
-            page = fetcher.get_json(url, params=params, headers={"apikey": api_key})
+            page = fetcher.get_json(api_base, params=params, headers={"apikey": api_key})
         except httpx.HTTPError as err:
             # Not chained (from None): the original request carries the apikey header.
             status = err.response.status_code if isinstance(err, httpx.HTTPStatusError) else "n/a"

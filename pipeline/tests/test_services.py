@@ -67,6 +67,9 @@ def test_fetch_snapshot_pages_and_normalises() -> None:
     assert snap.listed["FA002"] == frozenset()  # lower-case code normalised
     assert "SRV0274" in snap.listed["FE412"]
     assert snap.api_base == BASE
+    assert all(c[0] == BASE for c in fake.calls)
+    assert all(c[1]["search"] == "*" and c[1]["searchMode"] == "all" for c in fake.calls)
+    assert all(c[1]["api-version"] == "3" for c in fake.calls)
     assert [c[1]["$skip"] for c in fake.calls] == ["0", "1000"]
     assert all(c[1]["$top"] == "1000" for c in fake.calls)
     assert all(c[1]["$filter"] == "OrganisationTypeId eq 'PHA'" for c in fake.calls)
