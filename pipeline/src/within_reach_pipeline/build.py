@@ -17,7 +17,7 @@ from within_reach_pipeline.bundle import (
     write_district_index,
     write_manifest,
 )
-from within_reach_pipeline.candidates import select_candidates
+from within_reach_pipeline.candidates import Candidate, select_candidates, select_service_candidates
 from within_reach_pipeline.config import PipelineConfig
 from within_reach_pipeline.http import HttpxFetcher
 from within_reach_pipeline.maps import MAP_CONFIG, build_area_map, write_map_entry
@@ -31,7 +31,7 @@ from within_reach_pipeline.reach import route_reachable
 from within_reach_pipeline.routing import WALK_PROFILE, Router, TravelRow
 from within_reach_pipeline.routing.fake import FakeRouter
 from within_reach_pipeline.routing.osrm import BBox, area_bbox
-from within_reach_pipeline.services import assign_services, load_snapshot
+from within_reach_pipeline.services import ServiceAssignment, assign_services, load_snapshot
 
 log = logging.getLogger(__name__)
 RouterKind = Literal["osrm", "fake"]
@@ -82,6 +82,25 @@ def postcodes_without_walk(rows: Sequence[TravelRow]) -> int:
     for row in rows:
         walkable[row.pc_idx] = walkable.get(row.pc_idx, False) or row.walk_m is not None
     return sum(1 for ok in walkable.values() if not ok)
+
+
+def _service_extras(
+    postcodes: Sequence[Postcode],
+    pharmacies: Sequence[Pharmacy],
+    candidates: Sequence[list[Candidate]],
+    assignment: ServiceAssignment,
+    config: PipelineConfig,
+) -> list[list[Candidate]]:
+    """Per postcode, the pharmacies listing each service to add to its candidates (one entry
+    per pharmacy, even if it lists several services). Empty when services are off."""
+    extras: list[dict[int, Candidate]] = [{} for _ in postcodes]
+    for members in assignment.listed.values():
+        chosen = select_service_candidates(
+            postcodes, pharmacies, candidates, members, config.service_min, config.reach_cap_m
+        )
+        for i, row in enumerate(chosen):
+            extras[i].update((c.ph_idx, c) for c in row)
+    return [sorted(e.values(), key=lambda c: (c.straight_m, c.ph_idx)) for e in extras]
 
 
 def build_release(
@@ -151,11 +170,13 @@ def build_release(
             config.max_candidates,
             config.min_candidates,
         )
-        used = sorted({c.ph_idx for row in candidates for c in row})
+        extras = _service_extras(area_postcodes, pharmacies, candidates, assignment, config)
+        used = sorted({c.ph_idx for rows in (candidates, extras) for row in rows for c in row})
         points = [(p.lat, p.lon) for p in area_postcodes]
         points += [(pharmacies[i].lat, pharmacies[i].lon) for i in used]
-        # The extract is sized from the first-pass candidates; widening only adds pharmacies
-        # inside it, because nothing outside can be routed.
+        # The extract is sized from the first-pass candidates and the service extras, so both
+        # can be routed and shown on the map; widening only adds pharmacies inside it, because
+        # nothing outside can be routed.
         bbox = area_bbox(points)
         allowed = {i for i, p in enumerate(pharmacies) if _inside(bbox, p)}
         map_entry: dict[str, Any] | None = None
@@ -175,6 +196,9 @@ def build_release(
                 cap_m=config.reach_cap_m,
                 max_rounds=config.reach_max_rounds,
                 cycle_min_extra_m=config.cycle_note_min_extra_m,
+                service_extras=extras,
+                services=assignment.listed,
+                service_min=config.service_min,
             )
             rows = reach.rows
             final_used = sorted({r.ph_idx for r in rows})
@@ -203,6 +227,10 @@ def build_release(
                 "postcodes_without_walk": postcodes_without_walk(rows),
                 "postcodes_without_route": postcodes_without_route(rows),
                 "postcodes_widened_to_cap": len(reach.widened_to_cap),
+                "services": {
+                    key: {"postcodes_short": len(short)}
+                    for key, short in reach.service_short.items()
+                },
                 "files": {"postcodes": postcode_info.as_dict(), "travel": travel_info.as_dict()},
                 **({"map": map_entry} if map_entry is not None else {}),
             }

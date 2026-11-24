@@ -282,3 +282,72 @@ def test_merge_keeps_services_fields(tmp_path: Path) -> None:
         assert merged[key] == base[key]
     assert merged["config"]["services"] == base["config"]["services"]
     assert merged["config"]["service_min"] == base["config"]["service_min"]
+
+
+def test_area_entry_counts_service_shortfall(tmp_path: Path) -> None:
+    cache = make_cache(tmp_path)
+    off = _build(cache, tmp_path / "off", "E06000050")
+    assert off["areas"][0]["services"] == {}
+    _save_snapshot(cache)
+    on = _build_with(cache, tmp_path / "on", "E06000050")
+    # Only FA002 lists the service, so every Chester postcode is short of 5.
+    assert on["areas"][0]["services"] == {"nsp": {"postcodes_short": 3}}
+
+
+def test_build_extract_includes_service_pharmacies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pharmacy listing the service 15 km away, not a first-pass candidate, lies inside the
+    extract, and is routed."""
+    from within_reach_pipeline import build
+    from within_reach_pipeline.config import ServiceDef
+
+    boxes: list[tuple[float, float, float, float]] = []
+
+    def fake_extract(stack: object, cache: Path, bbox: tuple[float, float, float, float]) -> Path:
+        boxes.append(bbox)
+        return tmp_path / "area.osm.pbf"
+
+    def fake_map(
+        image: str, pbf: Path, points: object, config_file: Path, coastline: Path, dest: Path
+    ) -> None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"PMTiles\x03" + b"\0" * 2)
+
+    monkeypatch.setattr(build, "_area_extract", fake_extract)
+    monkeypatch.setattr(build, "build_area_map", fake_map)
+    cache = make_cache(tmp_path)
+    save_snapshot(
+        Snapshot(
+            "2026-11-01T00:00:00Z",
+            "https://api.service.nhs.uk/service-search-api/",
+            {"FW002": frozenset({"SRV0274"})},
+        ),
+        cache / cli.SERVICES_FILE,
+    )
+    # Two first-pass candidates (the Chester pharmacies); the service also covers Wales here,
+    # so FW002 in Wrexham (LL12 7AA, about 15 km from Chester) lists it.
+    config = replace(
+        load_config(),
+        services_enabled=True,
+        min_candidates=2,
+        radius_m=2500,
+        services=(ServiceDef("nsp", "Needle exchange", "SRV0274", ("England", "Wales")),),
+    )
+    out = tmp_path / "out"
+    argv = ["build", "--cache", str(cache), "--release", "2026-11", "--out", str(out)]
+    argv += ["--router", "fake", "--built-at", BUILT_AT, "--maps", "tilemaker"]
+    argv += ["--areas", "E06000050"]
+    assert cli.run(argv, config=config) == 0
+    [(min_lon, min_lat, max_lon, max_lat)] = boxes
+    fw002_lat, fw002_lon = 53.0606, -2.9779
+    assert min_lat <= fw002_lat <= max_lat and min_lon <= fw002_lon <= max_lon
+    with gzip.open(out / "pharmacies.csv.gz", "rt") as f:
+        codes = [r[2] for r in list(csv.reader(f))[1:]]
+    fw002 = codes.index("FW002")
+    with gzip.open(out / "areas" / "E06000050" / "travel.csv.gz", "rt") as f:
+        travel = list(csv.DictReader(f))
+    for pc_idx in ("0", "1", "2"):
+        rows = [r for r in travel if r["pc_idx"] == pc_idx]
+        assert str(fw002) in {r["ph_idx"] for r in rows}
+        assert len(rows) == 3  # FA001, FA002 and the service row FW002
