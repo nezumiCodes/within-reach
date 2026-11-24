@@ -74,5 +74,20 @@ Design: `docs/superpowers/specs/2026-11-22-walking-rules-and-reachable-pharmacie
 - **How often the note appears:** on 10% of all rows in Cheshire West and Chester, 8% in Betsi Cadwaladr and 7% in Medway. Many UK cycle paths don't say whether walkers may use them.
 - **Build time** for the three areas with maps: about 4½ minutes, the same before and after.
 - **Two reference cases changed** their third-nearest pharmacy, because a walk got shorter through a newly allowed bridleway or trunk-road pavement: CH2 3JQ (Boots, Foregate Street) and LL21 0BB (Glyn Ceiriog Pharmacy). `pipeline/reference/expectations.toml` notes why.
-- **The data-2026-11 baseline** for all of Great Britain was 183 postcodes without a walking route: Cheshire West and Chester 69, Argyll and Bute 60, Medway 49, Wokingham 5. Oban (Argyll and Bute) and Crowthorne (Wokingham) have a different cause, still to be investigated.
 - **The app reads both travel-file layouts**, so v0.2.0 can go live before the first release built with these rules.
+
+**All of Great Britain, data-2026-11 rebuilt on 23 Nov 2026** with these rules (pipeline run 45223162832, all release checks passed, including the Lache and Allhallows reference cases):
+
+| Area | Postcodes without a walking route, first data-2026-11 (18 Nov) | Rebuilt (23 Nov) |
+|---|---|---|
+| Cheshire West and Chester (E06000050) | 69 | 0 |
+| Argyll and Bute (S12000035) | 60 | 0 |
+| Medway (E06000035) | 49 | 0 |
+| Wokingham (E06000041) | 5 | 5 |
+| **Great Britain** (1,748,230 postcodes) | **183** | **5** |
+
+- **Oban** (Argyll and Bute) was fixed by the same rules, so it wasn't a separate cause after all. PA34 4AA now lists the two George Street pharmacies first.
+- **Crowthorne** (Wokingham): 5 postcodes still have no walking route, but every one has pharmacies reachable by car, so no postcode is left without a route (`postcodes_without_route` is 0 in every area). The cause is still to be investigated.
+- **No postcode needed the 25 km cap**: `postcodes_widened_to_cap` is 0 in every area.
+- **Allhallows (ME3 9EJ)** on the live site: Knights Pharmacy and Hoo Pharmacy, then four Sheerness pharmacies (reachable by car over the Sheppey crossing, 45–47 minutes).
+- **Run time:** 141 minutes, against 93–100 minutes for earlier full runs. The slowest shard took 53 minutes, and the Scottish shards took at most 26.
