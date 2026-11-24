@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from within_reach_pipeline.config import ServiceDef, load_config
 
 CONFIG = Path(__file__).resolve().parents[1] / "config.toml"
@@ -43,3 +45,31 @@ def test_services_config_loads() -> None:
         config.services_listed_tolerance,
         config.services_max_missing_share,
     ) == (1000, 0.20, 0.10)
+
+
+def _with_keys(tmp_path: Path, *keys: str) -> Path:
+    text = CONFIG.read_text(encoding="utf-8")
+    start = text.index("[[services.catalogue]]")
+    entries = "".join(
+        f'[[services.catalogue]]\nkey = "{k}"\nname = "N"\ncode = "C"\nnations = ["England"]\n\n'
+        for k in keys
+    )
+    path = tmp_path / "config.toml"
+    end = text.index("[routing]")
+    path.write_text(text[:start] + entries + text[end:], encoding="utf-8")
+    return path
+
+
+def test_service_key_grammar_accepts_nsp(tmp_path: Path) -> None:
+    assert [s.key for s in load_config(_with_keys(tmp_path, "nsp")).services] == ["nsp"]
+
+
+@pytest.mark.parametrize("key", ["needle-exchange", "NSP", "", "a;b", "nsp?"])
+def test_service_key_grammar_rejects_bad_keys(tmp_path: Path, key: str) -> None:
+    with pytest.raises(ValueError, match="service key"):
+        load_config(_with_keys(tmp_path, key))
+
+
+def test_service_keys_must_be_unique(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="duplicate service key"):
+        load_config(_with_keys(tmp_path, "nsp", "nsp"))
