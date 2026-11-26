@@ -91,3 +91,37 @@ Design: `docs/superpowers/specs/2026-11-22-walking-rules-and-reachable-pharmacie
 - **No postcode needed the 25 km cap**: `postcodes_widened_to_cap` is 0 in every area.
 - **Allhallows (ME3 9EJ)** on the live site: Knights Pharmacy and Hoo Pharmacy, then four Sheerness pharmacies (reachable by car over the Sheppey crossing, 45–47 minutes).
 - **Run time:** 141 minutes, against 93–100 minutes for earlier full runs. The slowest shard took 53 minutes, and the Scottish shards took at most 26.
+
+## Service filters: needle exchange (England)
+
+Design: `docs/superpowers/specs/2026-11-24-needle-exchange-filter-design.md`.
+
+**Research (24 Nov 2026).** Supervised consumption was the first goal, but no open source covers it in any nation.
+- **Dispensing data can't show opioid substitution** in any nation:
+  - NHSBSA's contractor dispensing file only counts services and items;
+  - PHS's dispenser file leaves out Schedule 2 and 3 controlled drugs;
+  - NWSSP's files count items by GP practice only.
+- **DoHS v3 test environment:** supervised consumption (`SRV0258`) is listed by 1 of 11,227 pharmacies (an online pharmacy). Needle and syringe exchange (`SRV0274`) is listed by 1,583. So needle exchange was built first.
+- **Scotland and Wales:** NHS inform / NHS 24 and NHS 111 Wales list services per pharmacy, but their terms don't allow reuse without permission. Permission has been requested.
+
+**Decisions**
+- **Source:** the NHS England Directory of Healthcare Services (DoHS) API, v3, for England. Content is under the Open Government Licence, with the attribution line in `docs/data-format.md`.
+- **Services are data.** Each is declared in `pipeline/config.toml` (`key`, `name`, DoHS `code`, `nations`), so a new service or nation is added as data, not by redesign.
+- **A `services` cell per pharmacy** (`key` listed, `key?` not known, absent not listed), not rules by nation. A later source may cover some English councils and not others, so "not known" can't be decided by nation. The app needs no nation rules.
+- **Wording is always "not listed", never "doesn't offer".** Listings are what pharmacies publish on their NHS website profiles. Some pharmacies that offer needle exchange don't list it.
+- **Scottish and Welsh pharmacies are "not known"** (`nsp?`), the same pattern as opening hours.
+- **English pharmacies missing from DoHS are "not listed"** (empty cell). They are counted as `missing_dohs`, and the release check fails at 10% or more.
+- **Routed service candidates.** Filtering only the existing candidates would find nothing in rural areas with 5 or 6 candidates, even with a needle exchange 8 km away, which would wrongly tell someone there is none near them. Instead each postcode is routed to its nearest `service_min` (5) pharmacies listing each service, up to `reach_cap_m` (25 km):
+  - `service_min` is a total: service pharmacies already among the candidates count towards it;
+  - these rows are exempt from the 40-candidate cap, and a pharmacy that is also nearby is stored once;
+  - the map extract and bounding box are sized after they are chosen, so they can be routed and shown on the map;
+  - they don't count towards the "at least 5 reachable" widening. Otherwise distant service rows could push out nearer pharmacies (the Allhallows case, ME3 9EJ);
+  - each service widens with its own `reach_max_rounds` budget.
+- **Straight-line fallback in the app was rejected.** It mixes routed and unrouted results and brings back straight-line distance across estuaries, which v0.2.0 removed.
+- **The switch.** `[services] enabled = false` in `pipeline/config.toml` until production access to the DoHS API is approved by NHS England. Branch runs always build with services off, and integration (test) data is never published. With it off, releases and the app are unchanged: empty `services` cells, `config.services = []`, `services = {}`, and no Services group.
+- **Order of release:** the app that reads both pharmacy layouts, then the production key, then the switch on.
+- **The key** comes from `NHS_DOHS_API_KEY`. It is never logged or written to the cache, the release or error messages. See `pipeline/README.md`.
+- **Release checks:** at least 1,000 pharmacies listed, within ±20% of the previous release, `missing_dohs` under 10% of English pharmacies, and only configured keys in the `services` column.
+- **Test fixture:** the app's e2e fixture uses made-up services (`fixtures/synthetic/fixture_services.csv`), not DoHS data.
+
+**Open question: refresh.** DoHS terms ask for a 24-hour refresh of cached content. The pipeline is monthly, because routes depend on the service list. Whether monthly is acceptable is with NHS England. If not, the planned follow-up is a small daily job that publishes a service list, so the app can hide pharmacies that have dropped a service.
