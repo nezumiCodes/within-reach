@@ -62,7 +62,10 @@ def route_reachable(
     service_extras: Sequence[list[Candidate]] | None = None,
     services: Mapping[str, frozenset[int]] | None = None,
     service_min: int = 0,
+    service_allowed: set[int] | None = None,
 ) -> ReachResult:
+    """service_allowed: where service widening may search (default: allowed). It can be larger
+    than allowed, the general reach widening's area, because service extras widen the extract."""
     services = services or {}
     count = len(postcodes)
 
@@ -128,7 +131,7 @@ def route_reachable(
         return sum(1 for ph, r in routed[i].items() if ph in members and _reachable(r))
 
     for members in services.values():
-        inside = allowed & members
+        inside = (allowed if service_allowed is None else service_allowed) & members
         searching = {i for i in range(count) if listed_reachable(i, members) < service_min}
         for _ in range(max_rounds):
             if not searching:

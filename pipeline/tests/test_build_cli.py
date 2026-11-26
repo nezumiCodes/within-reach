@@ -351,3 +351,59 @@ def test_build_extract_includes_service_pharmacies(
         rows = [r for r in travel if r["pc_idx"] == pc_idx]
         assert str(fw002) in {r["ph_idx"] for r in rows}
         assert len(rows) == 3  # FA001, FA002 and the service row FW002
+
+
+def test_services_leave_the_general_rows_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A service pharmacy far away widens the extract, but reach widening for the general rows
+    searches only the box it would have without services (needle exchange design, section 3).
+
+    FA002 (CH2 1AA) can't be reached, so each Chester postcode widens. Without services
+    nothing else lies in its box. With FW002 (Wrexham, 15 km) listing the service, the extract
+    reaches Wrexham, where FWF56 also lies: it must not become a general row."""
+    from within_reach_pipeline import build
+    from within_reach_pipeline.config import ServiceDef
+    from within_reach_pipeline.routing.fake import FakeRouter
+
+    fa002 = (53.2009, -2.8678)
+
+    def routers(kind: object, stack: object, pbf: object, config: object) -> tuple[object, object]:
+        return (
+            FakeRouter(build.WALK_SPEED_M_S, unreachable={fa002}),
+            FakeRouter(build.DRIVE_SPEED_M_S, unreachable={fa002}),
+        )
+
+    monkeypatch.setattr(build, "_routers", routers)
+    cache = make_cache(tmp_path)
+    save_snapshot(
+        Snapshot(
+            "2026-11-01T00:00:00Z",
+            "https://api.service.nhs.uk/service-search-api/",
+            {"FW002": frozenset({"SRV0274"})},
+        ),
+        cache / cli.SERVICES_FILE,
+    )
+    base = replace(
+        load_config(),
+        min_candidates=2,
+        radius_m=2500,
+        services=(ServiceDef("nsp", "Needle exchange", "SRV0274", ("England", "Wales")),),
+    )
+
+    def travel(enabled: bool) -> dict[str, set[str]]:
+        out = tmp_path / f"out-{enabled}"
+        argv = ["build", "--cache", str(cache), "--release", "2026-11", "--out", str(out)]
+        argv += ["--router", "fake", "--built-at", BUILT_AT, "--areas", "E06000050"]
+        assert cli.run(argv, config=replace(base, services_enabled=enabled)) == 0
+        with gzip.open(out / "pharmacies.csv.gz", "rt") as f:
+            codes = {r["ph_idx"]: r["code"] for r in csv.DictReader(f)}
+        rows: dict[str, set[str]] = {}
+        with gzip.open(out / "areas" / "E06000050" / "travel.csv.gz", "rt") as f:
+            for r in csv.DictReader(f):
+                rows.setdefault(r["pc_idx"], set()).add(codes[r["ph_idx"]])
+        return rows
+
+    off, on = travel(False), travel(True)
+    assert off == {pc: {"FA001"} for pc in ("0", "1", "2")}
+    assert on == {pc: {"FA001", "FW002"} for pc in ("0", "1", "2")}  # plus the service row only

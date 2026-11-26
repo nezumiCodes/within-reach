@@ -158,6 +158,7 @@ def _run_services(
     listed: frozenset[int],
     *,
     allowed: set[int] | None = None,
+    service_allowed: set[int] | None = None,
     max_candidates: int = 40,
     walk: Router | None = None,
     drive: Router | None = None,
@@ -181,6 +182,7 @@ def _run_services(
         service_extras=extras,
         services={"nsp": listed},
         service_min=5,
+        service_allowed=service_allowed,
     )
 
 
@@ -233,6 +235,24 @@ def test_service_widening_stays_inside_allowed() -> None:
     result = _run_services(pharmacies, [services[0]], listed, allowed=set(range(10)), walk=walk)
     assert (outside.lat, outside.lon) not in {d for _, d, _ in walk.pairs}
     assert result.service_short == {"nsp": {0}}
+
+
+def test_service_widening_searches_service_allowed() -> None:
+    """The service extras widen the extract beyond the general box: service widening may
+    search all of it, general widening only its own box."""
+    general = [_pharmacy(f"ME{i}", i + 1) for i in range(5)]
+    services = [_pharmacy(f"NS{i}", km) for i, km in enumerate((8, 9, 10, 11, 12, 13))]
+    pharmacies = general + services
+    listed = frozenset(range(5, 11))
+    result = _run_services(
+        pharmacies,
+        [services[0]],
+        listed,
+        allowed=set(range(10)),
+        service_allowed=set(range(11)),
+    )
+    assert 10 in {r.ph_idx for r in result.rows}
+    assert result.service_short == {"nsp": set()}
 
 
 def test_reach_widening_ignores_reachable_service_extras() -> None:

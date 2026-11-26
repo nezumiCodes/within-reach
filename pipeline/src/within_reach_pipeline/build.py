@@ -52,6 +52,18 @@ def _inside(bbox: BBox, pharmacy: Pharmacy) -> bool:
     return min_lon <= pharmacy.lon <= max_lon and min_lat <= pharmacy.lat <= max_lat
 
 
+def _box(
+    postcodes: Sequence[Postcode],
+    pharmacies: Sequence[Pharmacy],
+    *candidate_sets: Sequence[list[Candidate]],
+) -> BBox:
+    """The box around the postcodes and every pharmacy in the candidate sets, with margin."""
+    used = {c.ph_idx for rows in candidate_sets for row in rows for c in row}
+    points = [(p.lat, p.lon) for p in postcodes]
+    points += [(pharmacies[i].lat, pharmacies[i].lon) for i in sorted(used)]
+    return area_bbox(points)
+
+
 def _routers(
     kind: RouterKind, stack: ExitStack, pbf: Path | None, config: PipelineConfig
 ) -> tuple[Router, Router]:
@@ -171,14 +183,15 @@ def build_release(
             config.min_candidates,
         )
         extras = _service_extras(area_postcodes, pharmacies, candidates, assignment, config)
-        used = sorted({c.ph_idx for rows in (candidates, extras) for row in rows for c in row})
-        points = [(p.lat, p.lon) for p in area_postcodes]
-        points += [(pharmacies[i].lat, pharmacies[i].lon) for i in used]
         # The extract is sized from the first-pass candidates and the service extras, so both
         # can be routed and shown on the map; widening only adds pharmacies inside it, because
-        # nothing outside can be routed.
-        bbox = area_bbox(points)
-        allowed = {i for i, p in enumerate(pharmacies) if _inside(bbox, p)}
+        # nothing outside can be routed. Reach widening for the general rows searches only the
+        # box the first-pass candidates give, as with services off, so services never change
+        # which general pharmacies a postcode keeps (the Allhallows case, ME3 9QE).
+        general_bbox = _box(area_postcodes, pharmacies, candidates)
+        bbox = _box(area_postcodes, pharmacies, candidates, extras)
+        allowed = {i for i, p in enumerate(pharmacies) if _inside(general_bbox, p)}
+        service_allowed = {i for i, p in enumerate(pharmacies) if _inside(bbox, p)}
         map_entry: dict[str, Any] | None = None
         with ExitStack() as stack:
             needs_extract = router == "osrm" or maps == "tilemaker"
@@ -191,6 +204,7 @@ def build_release(
                 walk,
                 drive,
                 allowed=allowed,
+                service_allowed=service_allowed,
                 min_reachable=config.min_candidates,
                 max_candidates=config.max_candidates,
                 cap_m=config.reach_cap_m,
