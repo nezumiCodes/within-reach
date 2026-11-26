@@ -124,4 +124,21 @@ Design: `docs/superpowers/specs/2026-11-24-needle-exchange-filter-design.md`.
 - **Release checks:** at least 1,000 pharmacies listed, within ±20% of the previous release, `missing_dohs` under 10% of English pharmacies, and only configured keys in the `services` column.
 - **Test fixture:** the app's e2e fixture uses made-up services (`fixtures/synthetic/fixture_services.csv`), not DoHS data.
 
+**Effect, measured on 26 Nov 2026** (same November sources and maps, built locally with services off, then on, using a DoHS integration (test) snapshot; nothing from it was published):
+
+| Area | Travel rows, before → after | Travel file | Map | Build time | Postcodes short of 5 |
+|---|---|---|---|---|---|
+| Medway (E06000035) | 184,110 → 194,261 (+5.5%) | 2.00 → 2.13 MB (+6.3%) | 1.73 → 1.77 MB (+2.3%) | 45 s → 45 s | 84 of 6,188 |
+| Cheshire West and Chester (E06000050) | 117,623 → 160,420 (+36.4%) | 1.25 → 1.79 MB (+42.5%) | 6.45 → 8.76 MB (+35.8%) | 68 s → 86 s | 3 of 11,026 |
+| Betsi Cadwaladr (W11000023) | 186,312 → 230,850 (+23.9%) | 2.11 → 2.69 MB (+27.3%) | 13.95 → 16.93 MB (+21.4%) | 130 s → 158 s | 17,182 of 24,940 |
+| Highland (S12000017) | 54,025 → 54,025 (0%) | 0.62 MB (0%) | 28.83 → 28.84 MB (+0.0%) | 84 s → 80 s | 7,961 of 7,961 |
+
+- **No map grew by more than half** (the limit in the design, section 3), so no cap on map growth is needed. The largest growth is Cheshire West and Chester, +36%.
+- **The test snapshot:** 11,202 DoHS pharmacies, 1,567 listing `SRV0274`. The manifest counted `listed` 1,564, `missing_dohs` 72 and `unmatched_dohs` 1,372.
+- **Build time** for the four areas: 345 s before, 387 s after (+12%). Times per area run from one area's start to the next.
+- **Postcodes short of 5** (`services.nsp.postcodes_short`) is expected in Scotland and Wales, where only English pharmacies list the service. Welsh postcodes near the border get rows for English pharmacies, which is why the Betsi Cadwaladr files grow. No Highland postcode has an English pharmacy within 25 km.
+- **The nearest pharmacies are kept.** All 1,547 Medway postcodes with 40 candidates kept all 40. No Chester postcode has more than 20 candidates, so the cap never applies there.
+- **Three Allhallows postcodes (ME3 9QE, ME3 9QQ, ME3 9QZ) lose their seventh pharmacy**, a Sheerness one about 43 km on foot. The wider map extract brings Southend pharmacies across the estuary into the reach widening search, which can't reach them, and they take that round's places. Each still reaches at least 6 pharmacies besides the needle exchange rows. The ME3 9EJ reference case is unchanged.
+- **Two reference cases added**, chosen from the test data, so they must be rechecked on the first production run: SY14 8JA (Malpas, nearest needle exchange 16 km) and CH1 2DY (Chester centre, all 17 candidates kept plus 3 needle exchange rows beyond 5 km). Service cases are skipped while services are off.
+
 **Open question: refresh.** DoHS terms ask for a 24-hour refresh of cached content. The pipeline is monthly, because routes depend on the service list. Whether monthly is acceptable is with NHS England. If not, the planned follow-up is a small daily job that publishes a service list, so the app can hide pharmacies that have dropped a service.
