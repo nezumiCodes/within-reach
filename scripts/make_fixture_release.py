@@ -4,9 +4,14 @@
 The result is a small, valid release (manifest, checksums, renumbered indexes) plus a map per
 area, used by the browser tests (Phase 2 plan, Task 8). It contains public data only.
 
+With --services, each pharmacy's `services` cell comes from a CSV (nation,code,services) and
+the manifest carries the configured service definitions. The fixture's file,
+fixtures/synthetic/fixture_services.csv, is made up: it is not DoHS data.
+
 Usage (from pipeline/, so the pipeline package is importable):
   uv run python ../scripts/make_fixture_release.py SRC_RELEASE_DIR DEST_DATA_DIR \\
-      --districts CH2 CH4 LL11 --split-area E06000050 [--cache .cache]
+      --districts CH2 CH4 LL11 --split-area E06000050 [--cache .cache] \\
+      [--services ../fixtures/synthetic/fixture_services.csv]
 """
 
 from __future__ import annotations
@@ -23,11 +28,13 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
+from within_reach_pipeline.bundle import SERVICES_ATTRIBUTION
 from within_reach_pipeline.maps import write_map_entry
 
 LatLon = tuple[float, float]
 MapBuilder = Callable[[str, list[LatLon], Path], None]
 DEFAULT_CHUNK = 20 * 1024 * 1024
+SERVICES_FETCHED_AT = "2026-11-24T00:00:00Z"
 
 
 def _read(path: Path) -> list[dict[str, str]]:
@@ -49,6 +56,26 @@ def _write(
     return {"path": relative, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
 
 
+def _service_cells(path: Path) -> dict[tuple[str, str], str]:
+    with path.open(newline="", encoding="utf-8") as f:
+        return {(r["nation"], r["code"]): r["services"] for r in csv.DictReader(f)}
+
+
+def _service_defs() -> list[dict[str, Any]]:
+    from within_reach_pipeline.config import load_config
+
+    return [
+        {
+            "key": d.key,
+            "name": d.name,
+            "nations": list(d.nations),
+            "source": SERVICES_ATTRIBUTION,
+            "source_fetched_at": SERVICES_FETCHED_AT,
+        }
+        for d in load_config().services
+    ]
+
+
 def trim_release(
     src: Path,
     dest: Path,
@@ -57,10 +84,13 @@ def trim_release(
     build_map: MapBuilder | None,
     two_area: tuple[str, str] | None = None,
     split_area: str | None = None,
+    services: Path | None = None,
 ) -> dict[str, Any]:
     """Keep only postcodes in `districts`. two_area=(district, new_postcode) relabels that
     district's first Welsh postcode into a district mapped to two areas, so the app's
-    two-area search path is tested. Writes dest/manifest.json and dest/../latest.json."""
+    two-area search path is tested. services is a CSV (nation,code,services) that sets every
+    pharmacy's `services` cell, absent rows empty. Writes dest/manifest.json and
+    dest/../latest.json."""
     manifest = json.loads((src / "manifest.json").read_text(encoding="utf-8"))
     wanted = set(districts)
     district_rows = _read(src / manifest["districts"]["path"])
@@ -105,6 +135,13 @@ def trim_release(
         for p in pharmacies
         if int(p["ph_idx"]) in new_ph
     ]
+    if services is not None:
+        cells = _service_cells(services)
+        if "services" not in ph_header:  # a source from before the services column
+            ph_header.append("services")
+            ph_rows = [[*row, ""] for row in ph_rows]
+        for row in ph_rows:
+            row[-1] = cells.get((str(row[1]), str(row[2])), "")
     directory_info = _write(dest, "pharmacies.csv.gz", ph_header, ph_rows)
     count_by_nation = {"England": 0, "Scotland": 0, "Wales": 0}
     for row in ph_rows:
@@ -195,6 +232,8 @@ def trim_release(
     out["complete"] = True
     out["geocode_failures"] = []
     out["config"] = {**manifest["config"], "maps": "tilemaker" if build_map else "none"}
+    if services is not None:
+        out["config"]["services"] = _service_defs()
     (dest / "manifest.json").write_text(
         json.dumps(out, indent=1, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8"
     )
@@ -231,6 +270,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--split-area", default=None)
     parser.add_argument("--two-area", nargs=2, default=("LL11", "SY14 9ZZ"))
     parser.add_argument("--cache", type=Path, default=Path(".cache"))
+    parser.add_argument("--services", type=Path, default=None, help="nation,code,services CSV")
     args = parser.parse_args(argv)
     release = json.loads((args.src / "manifest.json").read_text(encoding="utf-8"))["release"]
     manifest = trim_release(
@@ -241,6 +281,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         tilemaker_builder(args.cache),
         two_area=tuple(args.two_area),
         split_area=args.split_area,
+        services=args.services,
     )
     for area in manifest["areas"]:
         print(

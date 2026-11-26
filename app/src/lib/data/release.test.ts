@@ -67,10 +67,16 @@ describe('parseManifest', () => {
   })
 
   it('manifest services default to none for older releases', () => {
-    const old: unknown = JSON.parse(fixtureManifest)
-    const parsed = parseManifest({ release: '2026-11' }, old)
+    const raw = JSON.parse(fixtureManifest) as { config: Record<string, unknown> }
+    const { services: _, reach_cap_m: __, ...config } = raw.config
+    const parsed = parseManifest({ release: '2026-11' }, { ...raw, config })
     expect(parsed?.services).toEqual([])
     expect(parsed?.reachCapM).toBe(25000)
+  })
+
+  it('the fixture release carries the made-up Needle exchange service', () => {
+    const parsed = parseManifest({ release: '2026-11' }, JSON.parse(fixtureManifest))
+    expect(parsed?.services).toEqual([{ key: 'nsp', name: 'Needle exchange' }])
   })
 
   it('manifest exposes services and the reach cap', () => {

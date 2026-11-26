@@ -118,6 +118,59 @@ def test_walk_cycle_column_is_carried_through(source: Path, tmp_path: Path) -> N
     assert manifest["areas"][0]["postcodes_widened_to_cap"] == 0
 
 
+def test_services_file_fills_the_services_column_and_config(source: Path, tmp_path: Path) -> None:
+    pharmacies = _rows(source / "pharmacies.csv.gz")
+    english = next(p for p in pharmacies if p["nation"] == "England")
+    welsh = next(p for p in pharmacies if p["nation"] == "Wales")
+    services = tmp_path / "services.csv"
+    services.write_text(
+        f"nation,code,services\nEngland,{english['code']},nsp\nWales,{welsh['code']},nsp?\n"
+    )
+    districts = sorted(r["outward"] for r in _rows(source / "districts.csv.gz"))
+    dest = tmp_path / "fixture" / "2026-11"
+    manifest = mfr.trim_release(
+        source, dest, districts, chunk_bytes=None, build_map=None, services=services
+    )
+    cells = {(p["nation"], p["code"]): p["services"] for p in _rows(dest / "pharmacies.csv.gz")}
+    assert cells.pop(("England", english["code"])) == "nsp"
+    assert cells.pop(("Wales", welsh["code"])) == "nsp?"
+    assert set(cells.values()) == {""}
+    assert manifest["config"]["services"] == [
+        {
+            "key": "nsp",
+            "name": "Needle exchange",
+            "nations": ["England"],
+            "source": mfr.SERVICES_ATTRIBUTION,
+            "source_fetched_at": "2026-11-24T00:00:00Z",
+        }
+    ]
+    saved = json.loads((dest / "manifest.json").read_text())
+    assert saved["config"]["services"] == manifest["config"]["services"]
+
+
+def test_services_column_is_added_to_an_older_source(source: Path, tmp_path: Path) -> None:
+    path = source / "pharmacies.csv.gz"
+    header, *rows = gzip.decompress(path.read_bytes()).decode().splitlines()
+    assert header.endswith(",services")
+    old = [header.removesuffix(",services"), *(r.rsplit(",", 1)[0] for r in rows)]
+    path.write_bytes(gzip.compress(("\n".join(old) + "\n").encode(), mtime=0))
+    services = tmp_path / "services.csv"
+    services.write_text("nation,code,services\n")
+    dest = tmp_path / "fixture" / "2026-11"
+    mfr.trim_release(source, dest, ["CH1"], chunk_bytes=None, build_map=None, services=services)
+    assert list(_rows(dest / "pharmacies.csv.gz")[0])[-1] == "services"
+
+
+def test_without_services_file_output_is_unchanged(source: Path, tmp_path: Path) -> None:
+    dest = tmp_path / "fixture" / "2026-11"
+    manifest = mfr.trim_release(source, dest, ["CH1"], chunk_bytes=None, build_map=None)
+    source_manifest = json.loads((source / "manifest.json").read_text())
+    assert manifest["config"]["services"] == source_manifest["config"]["services"]
+    assert list(_rows(dest / "pharmacies.csv.gz")[0]) == list(
+        _rows(source / "pharmacies.csv.gz")[0]
+    )
+
+
 def test_older_six_column_source_stays_six_columns(source: Path, tmp_path: Path) -> None:
     def drop_column(header: str, rows: list[str]) -> tuple[str, list[str]]:
         return header.rsplit(",", 1)[0], [r.rsplit(",", 1)[0] for r in rows]

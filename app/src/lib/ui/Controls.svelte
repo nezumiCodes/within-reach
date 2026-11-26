@@ -3,14 +3,21 @@
   import type { Filters, HoursKey } from '../engine/hours'
   import type { SortMode } from '../engine/results'
 
-  let { mode = $bindable(), filters = $bindable() }: { mode: SortMode; filters: Filters } = $props()
+  let {
+    mode = $bindable(),
+    filters = $bindable(),
+    services,
+  }: { mode: SortMode; filters: Filters; services: { key: string; name: string }[] } = $props()
 
   const FILTER_LABELS: [HoursKey, string][] = [
     ['saturday', 'Open Saturday'],
     ['sunday', 'Open Sunday'],
     ['late', 'Open late'],
   ]
-  const active = $derived(FILTER_LABELS.filter(([key]) => filters[key]).map(([, label]) => label))
+  const active = $derived([
+    ...FILTER_LABELS.filter(([key]) => filters[key]).map(([, label]) => label),
+    ...services.filter((s) => filters.services[s.key]).map((s) => s.name),
+  ])
 </script>
 
 <div class="controls">
@@ -25,6 +32,25 @@
       <label><input type="checkbox" bind:checked={filters[key]} /> {label}</label>
     {/each}
   </fieldset>
+  {#if services.length > 0}
+    <fieldset>
+      <legend>Services</legend>
+      {#each services as service (service.key)}
+        <label>
+          <input
+            type="checkbox"
+            bind:checked={filters.services[service.key]}
+            aria-describedby="services-note"
+          />
+          {service.name}
+        </label>
+      {/each}
+      <p class="note" id="services-note">
+        From pharmacies' NHS website listings. Some pharmacies that offer it don't list it. Phone to
+        check.
+      </p>
+    </fieldset>
+  {/if}
   <p class="active">
     Sorted by {mode === 'walk' ? 'walking distance' : 'driving time'}.
     {#if active.length > 0}<span>Filters: {active.join(', ')}</span>{/if}
@@ -53,6 +79,11 @@
   }
   label {
     white-space: nowrap;
+  }
+  .note {
+    flex-basis: 100%;
+    margin: 0;
+    color: var(--muted);
   }
   .active {
     flex-basis: 100%;
