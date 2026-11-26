@@ -640,3 +640,14 @@ def test_service_reference_case_with_an_unconfigured_key_fails(tmp_path: Path) -
     failures = run_checks(release, SERVICES_CONFIG, None, path)
     assert _only(failures) == "reference"
     assert "not a configured service" in failures[0].detail
+
+
+def test_service_reference_case_with_an_unconfigured_key_fails_with_services_off(
+    tmp_path: Path,
+) -> None:
+    release = _release(tmp_path)
+    path = _service_reference(tmp_path, 5000)
+    path.write_text(path.read_text().replace('"nsp"', '"nps"'))
+    failures = run_checks(release, CONFIG, None, path)
+    assert _only(failures) == "reference"
+    assert "not a configured service" in failures[0].detail

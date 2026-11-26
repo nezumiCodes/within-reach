@@ -284,7 +284,7 @@ def _check_reference(
         for key in filter(None, row["services"].split(";")):
             if not key.endswith("?"):
                 listing.setdefault(key, set()).add(row["ph_idx"])
-    configured = {d.key for d in config.services} if config.services_enabled else set()
+    catalogue = {d.key for d in config.services}  # whether or not the switch is on
     failures: list[CheckFailure] = []
     for case in cases:
         postcode = case["postcode"]
@@ -292,6 +292,13 @@ def _check_reference(
             # Most likely a misspelt key: without this the case would silently check nothing.
             failures.append(
                 CheckFailure("reference", f"{postcode}: case has neither nearest nor service")
+            )
+            continue
+        if "service" in case and case["service"] not in catalogue:
+            failures.append(
+                CheckFailure(
+                    "reference", f"{postcode}: {case['service']!r} is not a configured service"
+                )
             )
             continue
         travel: list[dict[str, str]] | None = None
@@ -312,14 +319,8 @@ def _check_reference(
             if manifest.get("complete", True):
                 failures.append(CheckFailure("reference", f"{postcode}: not in any built area"))
             continue
-        if "service" in case and not configured:
+        if "service" in case and not config.services_enabled:
             pass  # built with services off (branch runs): nothing to check until the switch
-        elif "service" in case and case["service"] not in configured:
-            failures.append(
-                CheckFailure(
-                    "reference", f"{postcode}: {case['service']!r} is not a configured service"
-                )
-            )
         elif "service" in case:
             members = listing.get(case["service"], set())
             found = sum(
