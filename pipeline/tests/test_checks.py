@@ -461,6 +461,20 @@ def test_reference_case_outside_a_partial_release_is_skipped(tmp_path: Path) -> 
     assert run_checks(release, CONFIG, None, reference, allow_partial=True) == []
 
 
+def test_reference_case_that_checks_nothing_fails(tmp_path: Path) -> None:
+    # A typo ("neares") must not turn a hand-checked case into one that always passes.
+    path = tmp_path / "expectations.toml"
+    path.write_text('[[case]]\npostcode = "CH1 1AA"\nneares = ["England:FA001"]\n')
+    failures = run_checks(_release(tmp_path), CONFIG, None, path)
+    assert _only(failures) == "reference"
+    assert "neither nearest nor service" in failures[0].detail
+    # Even outside the areas a partial release built.
+    (tmp_path / "p").mkdir()
+    partial = _partial_release(tmp_path / "p")
+    path.write_text('[[case]]\npostcode = "ZZ9 9ZZ"\nneares = ["England:FA001"]\n')
+    assert _only(run_checks(partial, CONFIG, None, path, allow_partial=True)) == "reference"
+
+
 def test_reference_case_missing_from_a_complete_release_fails(tmp_path: Path) -> None:
     release = _release(tmp_path)
     reference = _reference_for(tmp_path, "ZZ9 9ZZ")

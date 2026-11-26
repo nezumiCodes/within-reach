@@ -287,6 +287,12 @@ def _check_reference(
     failures: list[CheckFailure] = []
     for case in cases:
         postcode = case["postcode"]
+        if "nearest" not in case and "service" not in case:
+            # Most likely a misspelt key: without this the case would silently check nothing.
+            failures.append(
+                CheckFailure("reference", f"{postcode}: case has neither nearest nor service")
+            )
+            continue
         travel: list[dict[str, str]] | None = None
         for area in manifest["areas"]:
             for row in _rows(release / area["files"]["postcodes"]["path"]):
