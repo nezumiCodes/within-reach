@@ -274,7 +274,7 @@ def _check_service_counts(
 
 
 def _check_reference(
-    release: Path, manifest: dict[str, Any], reference: Path
+    release: Path, manifest: dict[str, Any], reference: Path, config: PipelineConfig
 ) -> list[CheckFailure]:
     cases = tomllib.loads(reference.read_text(encoding="utf-8")).get("case", [])
     directory: dict[str, str] = {}
@@ -284,6 +284,7 @@ def _check_reference(
         for key in filter(None, row["services"].split(";")):
             if not key.endswith("?"):
                 listing.setdefault(key, set()).add(row["ph_idx"])
+    configured = {d.key for d in config.services} if config.services_enabled else set()
     failures: list[CheckFailure] = []
     for case in cases:
         postcode = case["postcode"]
@@ -311,7 +312,15 @@ def _check_reference(
             if manifest.get("complete", True):
                 failures.append(CheckFailure("reference", f"{postcode}: not in any built area"))
             continue
-        if "service" in case:
+        if "service" in case and not configured:
+            pass  # built with services off (branch runs): nothing to check until the switch
+        elif "service" in case and case["service"] not in configured:
+            failures.append(
+                CheckFailure(
+                    "reference", f"{postcode}: {case['service']!r} is not a configured service"
+                )
+            )
+        elif "service" in case:
             members = listing.get(case["service"], set())
             found = sum(
                 1
@@ -421,5 +430,5 @@ def run_checks(
         failures += _check_counts(manifest, previous, config.count_tolerance)
         failures += _check_service_counts(manifest, previous, config.services_listed_tolerance)
     if reference is not None:
-        failures += _check_reference(release_dir, manifest, reference)
+        failures += _check_reference(release_dir, manifest, reference, config)
     return failures

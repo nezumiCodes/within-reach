@@ -624,3 +624,19 @@ def test_service_reference_case_ignores_unknown_cells(tmp_path: Path) -> None:
     _set_cells(release, "nsp?", first=None)
     _service_row_unknown = _service_reference(tmp_path, 0)
     assert _only(run_checks(release, SERVICES_CONFIG, None, _service_row_unknown)) == "reference"
+
+
+def test_service_reference_case_is_skipped_when_services_are_off(tmp_path: Path) -> None:
+    # Branch runs build with services off; the case applies once the switch is on.
+    release = _release(tmp_path)
+    assert run_checks(release, CONFIG, None, _service_reference(tmp_path, 5000)) == []
+
+
+def test_service_reference_case_with_an_unconfigured_key_fails(tmp_path: Path) -> None:
+    release = _service_release(tmp_path)
+    _service_row(release, 6000, "7500")
+    path = _service_reference(tmp_path, 5000)
+    path.write_text(path.read_text().replace('"nsp"', '"nps"'))
+    failures = run_checks(release, SERVICES_CONFIG, None, path)
+    assert _only(failures) == "reference"
+    assert "not a configured service" in failures[0].detail
