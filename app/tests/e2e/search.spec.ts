@@ -255,7 +255,8 @@ test('results page passes axe, with a filter on and with an error', async ({
   // Firefox still runs the at-rest axe scan in site.spec.ts and every functional test here.
   test.skip(browserName === 'firefox', 'Playwright Firefox driver crashes during this scan')
   await search(page, PC.chester)
-  await page.getByLabel('Needle exchange').check()
+  // The live site has no Services group until the pipeline's services switch is on.
+  if (!process.env.LIVE_URL) await page.getByLabel('Needle exchange').check()
   await page.getByLabel('Open Sunday').check()
   await results(page).first().getByText('Opening hours').click()
   const withResults = await new AxeBuilder({ page }).withTags(WCAG).analyze()
