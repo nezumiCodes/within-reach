@@ -89,11 +89,9 @@ nearest = ["England:FEM57", "England:FJE35"]
 walk_m_range = [7819, 10579]
 
 [[case]]
-# Malpas outskirts (added Nov 2026, needle exchange): no pharmacy within 5 km lists needle
-# exchange, so the 5 nearest that do are routed from further away. Ellesmere Pharmacy SY12 0AW
-# 16.1 km in a straight line (20.4 km on foot); Boots CW5 5LN 16.5 km; The Village Pharmacy
-# CH3 7NX 16.4 km; Well CH1 4DS 20.5 km; Allied Pharmacy Rushtons CW1 3AX 22.3 km.
-# Chosen from DoHS integration (test) data on 26 Nov 2026: recheck on the first production run.
+# Malpas outskirts (added Nov 2026, needle exchange): expected to have no pharmacy within 5 km
+# that lists needle exchange, so at least 5 listing it are routed from further away.
+# Chosen on 26 Nov 2026 from a test snapshot: recheck on the first production run.
 postcode = "SY14 8JA"
 service = "nsp"
 min_rows = 5
@@ -102,11 +100,10 @@ beyond_m = 5000
 [[case]]
 # Chester centre (added Nov 2026, needle exchange): gains needle exchange rows without losing
 # any of its nearest pharmacies. All 17 pharmacies within 5 km are kept (no Chester postcode
-# has more than 20, so the 40 cap never applies here), plus three beyond 5 km that list it:
-# The Village Pharmacy CH3 7NX 5.5 km; Harrison Healthcare CH65 0DB 9.8 km; Boots L26 9UH
-# 19.2 km. Nearest on foot: Superdrug Pharmacy CH1 2HA 85 m; Tesco Instore Pharmacy CH1 3JS
-# 299 m; Boots CH1 1NA 309 m.
-# Chosen from DoHS integration (test) data on 26 Nov 2026: recheck on the first production run.
+# has more than 20, so the 40 cap never applies here), plus at least 3 beyond 5 km that list it.
+# Nearest on foot (from the public pharmacy lists): Superdrug Pharmacy CH1 2HA 85 m; Tesco
+# Instore Pharmacy CH1 3JS 299 m; Boots CH1 1NA 309 m.
+# Chosen on 26 Nov 2026 from a test snapshot: recheck on the first production run.
 postcode = "CH1 2DY"
 nearest = ["England:FY420", "England:FXP75", "England:FT378"]
 walk_m_range = [72, 98]

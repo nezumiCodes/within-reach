@@ -503,6 +503,15 @@ No code is committed from this task except `docs/decisions.md` numbers and refer
   - a Chester town postcode with nsp rows and all 40 nearest kept.
 - [ ] **Step 6:** Add the measurements table to the new section of `docs/decisions.md`, then commit: `git commit -m "docs: measured effect of service candidates on files, maps and build time"`
 
+### Release order (before Task 11 and before any data run)
+
+Merging this branch changes the data even with `enabled = false`: `write_directory` adds the `services` column to `pharmacies.csv.gz`. The live app, v0.2.0, only accepts the exact old header, so it would reject the file. The scheduled Pipeline run (2 December 2026, 03:00 UTC) builds from `main`, and `deploy.yml` then redeploys the latest `v*` tag with that data.
+
+- [ ] **Step 1:** Merge this branch only once CI passes.
+- [ ] **Step 2:** Tag `v0.3.0` from `main` straight after the merge, before any data run, and before the scheduled run on 2 December 2026 at 03:00 UTC. The user does this: don't tag without asking.
+- [ ] **Step 3:** If the merge can't be followed by the tag before that run, hold the merge until after it.
+- [ ] **Step 4:** Check the live site loads after the tag deploys. Then the production key (Task 11), then the switch on.
+
 ### Task 11 (BLOCKED: needs the production key and the user's approval of a new GitHub environment)
 
 Don't start this until the user says so. It changes security settings (CLAUDE.md).
@@ -512,6 +521,14 @@ Don't start this until the user says so. It changes security settings (CLAUDE.md
   - `environment: dohs` (restricted to `main`, holding `NHS_DOHS_API_KEY`);
   - runs `within-reach-pipeline fetch-services --cache .cache-services`;
   - uploads `dohs_services.json` as an artifact if it exists.
-- **`build` and `assemble`** `needs:` it, with `if: always()` guards, and download the artifact into `.cache` when present. Branch runs never have it, so they build with services off.
+- **`build` and `assemble`** `needs:` it, with `if: always()` guards, and download the artifact into `.cache` when present.
+- **Branch runs switch services off explicitly.** Once `enabled = true` is on `main`, branches inherit it, and with no snapshot `build` raises `FileNotFoundError`. `_check_services` and the service reference cases would also fail on a release built with services off. So on non-main runs the workflow writes a copy of `config.toml` with `enabled = false`, points `WITHIN_REACH_CONFIG` at it, and runs `build`, `check` and `assemble` with that same config. Main runs use the committed config.
 - **Switch-on PR:** set `[services] enabled = true` and `api_base` stays production.
 - **First production run:** recheck the Task 10 reference cases against production data.
+
+**Before switch-on checklist** (from the final review; fix in code before `enabled = true`):
+- [ ] Page DoHS results with a stable `$orderby`, or check the total against `@odata.count`, so no pharmacy is skipped or repeated.
+- [ ] Union, don't overwrite, duplicate ODS codes.
+- [ ] Turn off redirect-following for DoHS requests. The `apikey` header isn't stripped on cross-host redirects.
+- [ ] Retry 429 with backoff, honouring `Retry-After`.
+- [ ] Record the snapshot's source host in the manifest, and have `check` refuse a non-production base for full releases.

@@ -24,7 +24,7 @@ uv run within-reach-pipeline fetch-services --cache .cache
 uv run within-reach-pipeline build --cache .cache --release 2026-12 --out out
 ```
 
-- `[services] enabled = false` until production access to the DoHS API is approved. With it off, `fetch-services` writes nothing, and `build` writes empty `services` cells, `config.services = []` and `services = {}`. Runs from branches always build with services off.
+- `[services] enabled = false` until production access to the DoHS API is approved. With it off, `fetch-services` writes nothing, and `build` writes empty `services` cells, `config.services = []` and `services = {}`. While it is off, no run fetches services. After switch-on, branch runs will be configured to build with services off (plan Task 11).
 - `NHS_DOHS_API_KEY` is the API key. `fetch-services` fails if it is missing.
 - `NHS_DOHS_API_BASE` optionally replaces `api_base` from the config. The integration (test) base is `https://int.api.service.nhs.uk/service-search-api/`.
 - `WITHIN_REACH_CONFIG` is the path to a `config.toml`, used instead of the default one by every command. An explicit config passed in code wins, then this variable, then the default.
