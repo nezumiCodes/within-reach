@@ -104,10 +104,15 @@ class HttpxFetcher:
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> Any:
-        # Some APIs (NHS ODS) answer 406 unless JSON is requested explicitly. Redirects are
-        # not followed: httpx would send extra headers (the DoHS apikey) on to the new host.
+        # Some APIs (NHS ODS) answer 406 unless JSON is requested explicitly. A request with
+        # extra headers may carry a credential (the DoHS apikey), which httpx would send on to
+        # a redirect's new host, so it doesn't follow redirects; plain requests still do.
         return self._get(
-            url, params, accept="application/json", extra_headers=headers, follow_redirects=False
+            url,
+            params,
+            accept="application/json",
+            extra_headers=headers,
+            follow_redirects=not headers,
         ).json()
 
     def get_text(self, url: str) -> str:

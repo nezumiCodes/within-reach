@@ -114,6 +114,14 @@ def test_get_json_does_not_follow_redirects() -> None:
     assert "secret-key" not in str(err.value) and "apikey" not in str(err.value)
 
 
+def test_plain_get_json_follows_redirects() -> None:
+    # CKAN, ORD (OrgLink) and OSRM carry no credentials; a host move mustn't break the build.
+    seen: list[str] = []
+    fetcher = HttpxFetcher(UA, transport=_redirecting(seen), backoff_s=0)
+    assert fetcher.get_json("https://api.example.test/search", params={"q": "x"}) == {"ok": True}
+    assert seen == ["api.example.test -", "elsewhere.test -"]
+
+
 def test_get_text_and_download_still_follow_redirects(tmp_path: Path) -> None:
     seen: list[str] = []
     fetcher = HttpxFetcher(UA, transport=_redirecting(seen), backoff_s=0)
