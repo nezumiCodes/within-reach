@@ -527,8 +527,8 @@ Don't start this until the user says so. It changes security settings (CLAUDE.md
 - **First production run:** recheck the Task 10 reference cases against production data.
 
 **Before switch-on checklist** (from the final review; fix in code before `enabled = true`):
-- [ ] Page DoHS results with a stable `$orderby`, or check the total against `@odata.count`, so no pharmacy is skipped or repeated.
-- [ ] Union, don't overwrite, duplicate ODS codes.
-- [ ] Turn off redirect-following for DoHS requests. The `apikey` header isn't stripped on cross-host redirects.
-- [ ] Retry 429 with backoff, honouring `Retry-After`.
-- [ ] Record the snapshot's source host in the manifest, and have `check` refuse a non-production base for full releases.
+- [x] Page DoHS results with a stable `$orderby`, or check the total against `@odata.count`, so no pharmacy is skipped or repeated. Done 27 Nov 2026: both (`$orderby=ODSCode`, and the fetch fails unless the total matches `@odata.count`).
+- [x] Union, don't overwrite, duplicate ODS codes. Done 27 Nov 2026.
+- [x] Turn off redirect-following for DoHS requests. The `apikey` header isn't stripped on cross-host redirects. Done 27 Nov 2026 (any `get_json` request with headers, which only DoHS sends; a 3xx fails).
+- [x] Retry 429 with backoff, honouring `Retry-After`. Done 27 Nov 2026 (capped at 60 s).
+- [x] Record the snapshot's source host in the manifest, and have `check` refuse a non-production base for full releases. Done 27 Nov 2026 (`config.services[].source_host`).

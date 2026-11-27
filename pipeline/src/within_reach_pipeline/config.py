@@ -8,6 +8,9 @@ from pathlib import Path
 # The app's pharmacy parser accepts only this grammar for the keys in the services cell.
 SERVICE_KEY = re.compile(r"[a-z0-9_]+")
 
+# The production DoHS host. A full release's services must come from here (checks.py).
+DOHS_PRODUCTION_HOST = "api.service.nhs.uk"
+
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config.toml"
 
 

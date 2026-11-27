@@ -31,7 +31,7 @@ def _pages() -> list[dict[str, Any]]:
     made_up = json.loads((FIXTURES / "dohs_page.json").read_text())["value"]
     first = [{"ODSCode": f"ZZ{n:04d}", "Services": []} for n in range(997)] + made_up
     second = [{"ODSCode": f"YY{n:04d}", "Services": []} for n in range(2)]
-    return [{"value": first}, {"value": second}]
+    return [{"@odata.count": 1002, "value": first}, {"@odata.count": 1002, "value": second}]
 
 
 class DohsFake:
@@ -75,9 +75,62 @@ def test_fetch_snapshot_pages_and_normalises() -> None:
     assert [c[1]["$skip"] for c in fake.calls] == ["0", "1000"]
     assert all(c[1]["$top"] == "1000" for c in fake.calls)
     assert all(c[1]["$filter"] == "OrganisationTypeId eq 'PHA'" for c in fake.calls)
+    # A stable order, so records can't shift between pages, and a total to check against.
+    assert all(c[1]["$orderby"] == "ODSCode" for c in fake.calls)
+    assert all(c[1]["$count"] == "true" for c in fake.calls)
     assert all(set(c[2]) == {"apikey"} for c in fake.calls)
     # The key is only ever in a header.
     assert all(KEY not in c[0] and KEY not in c[1].values() for c in fake.calls)
+
+
+@pytest.mark.parametrize("count", [1003, 1001])
+def test_record_total_must_match_count(count: int) -> None:
+    pages = _pages()
+    for page in pages:
+        page["@odata.count"] = count
+    with pytest.raises(ServicesFetchError, match=rf"1002 records but @odata\.count is {count}"):
+        fetch_snapshot(DohsFake(pages), BASE, KEY, sleep=lambda s: None)
+
+
+def test_count_changing_between_pages_fails() -> None:
+    pages = _pages()
+    pages[1]["@odata.count"] = 1003
+    with pytest.raises(ServicesFetchError, match=r"@odata\.count changed"):
+        fetch_snapshot(DohsFake(pages), BASE, KEY, sleep=lambda s: None)
+
+
+def test_missing_count_fails() -> None:
+    pages = _pages()
+    del pages[0]["@odata.count"]
+    with pytest.raises(ServicesFetchError, match=r"no @odata\.count"):
+        fetch_snapshot(DohsFake(pages), BASE, KEY, sleep=lambda s: None)
+
+
+def test_short_count_writes_no_snapshot(tmp_path: Path) -> None:
+    pages = _pages()
+    for page in pages:
+        page["@odata.count"] = 1500
+    with pytest.raises(ServicesFetchError):
+        run(
+            ["fetch-services", "--cache", str(tmp_path)],
+            fetcher=DohsFake(pages),
+            env=KEYED,
+            config=ENABLED,
+        )
+    assert not (tmp_path / SERVICES_FILE).exists()
+
+
+def test_duplicate_ods_codes_take_the_union_of_services() -> None:
+    page = {
+        "@odata.count": 3,
+        "value": [
+            {"ODSCode": "FX001", "Services": [{"ServiceCode": "SRV0274"}]},
+            {"ODSCode": "fx001", "Services": [{"ServiceCode": "SRV0001"}]},
+            {"ODSCode": "FX001", "Services": None},
+        ],
+    }
+    snap = fetch_snapshot(DohsFake([page]), BASE, KEY, sleep=lambda s: None)
+    assert snap.listed == {"FX001": frozenset({"SRV0274", "SRV0001"})}
 
 
 def test_fetch_snapshot_pauses_between_pages_only() -> None:

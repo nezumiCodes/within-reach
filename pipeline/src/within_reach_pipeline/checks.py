@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from within_reach_pipeline.bundle import TRAVEL_COLUMNS
-from within_reach_pipeline.config import PipelineConfig
+from within_reach_pipeline.config import DOHS_PRODUCTION_HOST, PipelineConfig
 from within_reach_pipeline.maps import PMTILES_HEADER_BYTES, pmtiles_bounds
 
 NATIONS = ("England", "Scotland", "Wales")
@@ -212,11 +212,13 @@ def _check_counts(
 
 
 def _check_services(
-    release: Path, manifest: dict[str, Any], config: PipelineConfig
+    release: Path, manifest: dict[str, Any], config: PipelineConfig, allow_partial: bool = False
 ) -> list[CheckFailure]:
     """Service data is plausible and every `services` cell holds only configured keys.
 
-    With services off every cell is empty and the manifest has no service counts.
+    With services off every cell is empty and the manifest has no service counts. A full
+    release's services must come from the production DoHS host; a partial one (a local test
+    build against the integration API) may come from anywhere.
     """
     keys = {d.key for d in config.services} if config.services_enabled else set()
     failures: list[CheckFailure] = []
@@ -234,6 +236,17 @@ def _check_services(
         if counts:
             failures.append(CheckFailure("services", "service counts present with services off"))
         return failures
+    if not allow_partial:
+        hosts = {e["key"]: e.get("source_host") for e in manifest["config"].get("services", [])}
+        for key in sorted(keys):
+            if hosts.get(key) != DOHS_PRODUCTION_HOST:
+                failures.append(
+                    CheckFailure(
+                        "services",
+                        f"{key}: data from {hosts.get(key) or 'an unknown host'},"
+                        f" not {DOHS_PRODUCTION_HOST}",
+                    )
+                )
     england = manifest["directory"]["count_by_nation"].get("England", 0)
     for key in sorted(keys):
         entry = counts.get(key)
@@ -421,7 +434,7 @@ def run_checks(
     failures += _check_manifest_fields(manifest)
     failures += _check_geocode(manifest, config.geocode_failure_limit)
     failures += _check_distance_selling(manifest, config)
-    failures += _check_services(release_dir, manifest, config)
+    failures += _check_services(release_dir, manifest, config, allow_partial)
     if manifest["config"].get("maps") == "tilemaker":
         failures += _check_maps(release_dir, manifest)
     if not allow_partial:

@@ -6,13 +6,14 @@ import io
 import json
 import struct
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 from fakes import make_cache
 
 from within_reach_pipeline import cli
 from within_reach_pipeline.checks import CheckFailure, run_checks
-from within_reach_pipeline.config import PipelineConfig, load_config
+from within_reach_pipeline.config import DOHS_PRODUCTION_HOST, PipelineConfig, load_config
 from within_reach_pipeline.maps import write_map_entry
 
 # The fixture has 1 online-only pharmacy, not the 200+ a real release has.
@@ -512,11 +513,19 @@ def _set_cells(release: Path, cell: str, first: int | None = None) -> None:
     _edit_directory(release, edit)
 
 
-def _service_release(tmp_path: Path, name: str = "rel", cell: str = "nsp", **counts: int) -> Path:
+def _service_release(
+    tmp_path: Path,
+    name: str = "rel",
+    cell: str = "nsp",
+    host: str | None = "api.service.nhs.uk",
+    **counts: int,
+) -> Path:
     """A release as an enabled build would write it: a services manifest and cells."""
     release = _release(tmp_path, name)
     manifest = _manifest(release)
     manifest["services"] = {"nsp": {**NSP, **counts}}
+    entry = {"key": "nsp", "name": "Needle exchange", "nations": ["England"]}
+    manifest["config"]["services"] = [{**entry, **({"source_host": host} if host else {})}]
     _save(release, manifest)
     _set_cells(release, cell, first=1)
     return release
@@ -561,7 +570,10 @@ def test_services_off_needs_empty_cells(tmp_path: Path) -> None:
 
 def test_services_missing_from_the_manifest_fails(tmp_path: Path) -> None:
     release = _release(tmp_path)
-    assert _only(run_checks(release, SERVICES_CONFIG, None, None)) == "services"
+    failures = run_checks(release, SERVICES_CONFIG, None, None)
+    assert {f.check for f in failures} == {"services"}
+    assert any("no counts" in f.detail for f in failures)
+    assert _only(run_checks(release, SERVICES_CONFIG, None, None, allow_partial=True)) == "services"
 
 
 def test_service_listed_count_drop_over_tolerance(tmp_path: Path) -> None:
@@ -651,3 +663,25 @@ def test_service_reference_case_with_an_unconfigured_key_fails_with_services_off
     failures = run_checks(release, CONFIG, None, path)
     assert _only(failures) == "reference"
     assert "not a configured service" in failures[0].detail
+
+
+@pytest.mark.parametrize("host", ["int.api.service.nhs.uk", "dohs.example.test", None])
+def test_full_release_needs_services_from_the_production_host(
+    tmp_path: Path, host: str | None
+) -> None:
+    release = _service_release(tmp_path, host=host)
+    failures = run_checks(release, SERVICES_CONFIG, None, None)
+    assert _only(failures) == "services"
+    assert "api.service.nhs.uk" in failures[0].detail
+    # Local test builds against the integration API are checked with --allow-partial.
+    assert run_checks(release, SERVICES_CONFIG, None, None, allow_partial=True) == []
+
+
+def test_services_off_release_has_no_host_to_check(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    assert _manifest(release)["config"]["services"] == []
+    assert run_checks(release, CONFIG, None, None) == []
+
+
+def test_config_api_base_is_the_production_host() -> None:
+    assert urlsplit(load_config().services_api_base).hostname == DOHS_PRODUCTION_HOST
