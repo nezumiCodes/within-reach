@@ -238,6 +238,7 @@ def test_build_with_snapshot_writes_services(tmp_path: Path) -> None:
             "nations": ["England"],
             "source": SERVICES_ATTRIBUTION,
             "source_fetched_at": "2026-11-01T00:00:00Z",
+            "source_host": "api.service.nhs.uk",
         }
     ]
     assert manifest["config"]["service_min"] == 5

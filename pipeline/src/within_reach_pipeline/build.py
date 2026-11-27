@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from within_reach_pipeline.bundle import (
     ATTRIBUTION,
@@ -276,6 +277,7 @@ def build_release(
                     "nations": list(d.nations),
                     "source": SERVICES_ATTRIBUTION,
                     "source_fetched_at": snapshot.fetched_at,
+                    "source_host": urlsplit(snapshot.api_base).hostname or "",
                 }
                 for d in config.services
             ]

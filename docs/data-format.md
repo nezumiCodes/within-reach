@@ -97,7 +97,7 @@ The manifest records:
 - the release name and build time
 - each source's label, URL and SHA-256
 - the catchment settings and OSRM version, and in `config`: `walk_profile` (`foot-gb`), `reach_cap_m`, `reach_max_rounds` and `cycle_note_min_extra_m`
-- in `config`, for services: `services` (a list of `{key, name, nations, source, source_fetched_at}`, where `source` is the attribution text and `source_fetched_at` is when the DoHS snapshot was taken) and `service_min`
+- in `config`, for services: `services` (a list of `{key, name, nations, source, source_fetched_at, source_host}`, where `source` is the attribution text, `source_fetched_at` is when the DoHS snapshot was taken and `source_host` is the DoHS API host it came from, `api.service.nhs.uk` in production) and `service_min`. A full release fails its checks if `source_host` is anything else; a partial one (`--allow-partial`) may come from the integration API. The app reads only `key` and `name`, and ignores the other fields.
 - attribution text
 - pharmacy counts per nation
 - pharmacies that couldn't be geocoded
