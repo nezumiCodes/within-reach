@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import httpx
+import pytest
 
 from within_reach_pipeline.http import HttpxFetcher
 
@@ -89,3 +90,34 @@ def test_get_json_sends_extra_headers() -> None:
     fetcher = HttpxFetcher(UA, transport=httpx.MockTransport(handler))
     fetcher.get_json("https://example.test", headers={"apikey": "k"})
     assert seen == {"apikey": "k", "ua": UA, "accept": "application/json"}
+
+
+def _redirecting(seen: list[str]) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(f"{request.url.host} {request.headers.get('apikey', '-')}")
+        if request.url.host == "api.example.test":
+            return httpx.Response(302, headers={"Location": "https://elsewhere.test/x"})
+        return httpx.Response(200, json={"ok": True}, content=None)
+
+    return httpx.MockTransport(handler)
+
+
+def test_get_json_does_not_follow_redirects() -> None:
+    # The DoHS apikey header would be sent on to the redirect target.
+    seen: list[str] = []
+    fetcher = HttpxFetcher(UA, transport=_redirecting(seen), backoff_s=0)
+    with pytest.raises(httpx.HTTPStatusError) as err:
+        fetcher.get_json("https://api.example.test/search", headers={"apikey": "secret-key"})
+    assert seen == ["api.example.test secret-key"]  # one request, never retried or followed
+    assert err.value.response.status_code == 302
+    assert "302" in str(err.value) and "redirect" in str(err.value).lower()
+    assert "secret-key" not in str(err.value) and "apikey" not in str(err.value)
+
+
+def test_get_text_and_download_still_follow_redirects(tmp_path: Path) -> None:
+    seen: list[str] = []
+    fetcher = HttpxFetcher(UA, transport=_redirecting(seen), backoff_s=0)
+    assert fetcher.get_text("https://api.example.test/page") == '{"ok":true}'
+    fetcher.download("https://api.example.test/file", tmp_path / "f.json")
+    assert (tmp_path / "f.json").read_text() == '{"ok":true}'
+    assert [s.split()[0] for s in seen] == ["api.example.test", "elsewhere.test"] * 2

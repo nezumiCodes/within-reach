@@ -49,11 +49,22 @@ class HttpxFetcher:
         params: dict[str, str] | None = None,
         accept: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        follow_redirects: bool = True,
     ) -> httpx.Response:
         headers = {**({"Accept": accept} if accept else {}), **(extra_headers or {})} or None
         for attempt in range(1, self._retries + 1):
             try:
-                response = self._client.get(url, params=params, headers=headers)
+                response = self._client.get(
+                    url, params=params, headers=headers, follow_redirects=follow_redirects
+                )
+                if response.is_redirect:
+                    # Only reached with follow_redirects off. Never retried; the message names
+                    # the status only, not the URL or headers.
+                    raise httpx.HTTPStatusError(
+                        f"redirect not followed: HTTP {response.status_code}",
+                        request=response.request,
+                        response=response,
+                    )
                 if response.status_code < 500:
                     response.raise_for_status()
                     return response
@@ -71,8 +82,11 @@ class HttpxFetcher:
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> Any:
-        # Some APIs (NHS ODS) answer 406 unless JSON is requested explicitly.
-        return self._get(url, params, accept="application/json", extra_headers=headers).json()
+        # Some APIs (NHS ODS) answer 406 unless JSON is requested explicitly. Redirects are
+        # not followed: httpx would send extra headers (the DoHS apikey) on to the new host.
+        return self._get(
+            url, params, accept="application/json", extra_headers=headers, follow_redirects=False
+        ).json()
 
     def get_text(self, url: str) -> str:
         return self._get(url).text
