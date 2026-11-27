@@ -43,8 +43,14 @@ def fetch_snapshot(
     sleep: Callable[[float], None] = time.sleep,
     now: Callable[[], str] = lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
 ) -> Snapshot:
+    """Page through every DoHS pharmacy, in ODS code order so records can't shift between pages.
+
+    Fails, so no snapshot is written, unless the records received add up to `@odata.count`.
+    """
     listed: dict[str, frozenset[str]] = {}
     skip = 0
+    received = 0
+    total: int | None = None
     while True:
         params = {
             "api-version": "3",
@@ -54,6 +60,8 @@ def fetch_snapshot(
             "$filter": "OrganisationTypeId eq 'PHA'",
             "$top": str(PAGE_SIZE),
             "$skip": str(skip),
+            "$orderby": "ODSCode",
+            "$count": "true",
         }
         try:
             page = fetcher.get_json(api_base, params=params, headers={"apikey": api_key})
@@ -63,7 +71,16 @@ def fetch_snapshot(
             raise ServicesFetchError(
                 f"DoHS request failed at $skip={skip}: HTTP {status}"
             ) from None
+        count = page.get("@odata.count")
+        if not isinstance(count, int):
+            raise ServicesFetchError(f"DoHS page at $skip={skip} has no @odata.count")
+        if total is not None and count != total:
+            raise ServicesFetchError(
+                f"DoHS @odata.count changed from {total} to {count} at $skip={skip}"
+            )
+        total = count
         records = page["value"]
+        received += len(records)
         for record in records:
             code = str(record["ODSCode"]).strip().upper()
             listed[code] = frozenset(_service_code(s) for s in record.get("Services") or [])
@@ -71,6 +88,8 @@ def fetch_snapshot(
             break
         skip += PAGE_SIZE
         sleep(PAGE_PAUSE_S)
+    if received != total:
+        raise ServicesFetchError(f"DoHS returned {received} records but @odata.count is {total}")
     log.info("DoHS: %d pharmacies", len(listed))
     return Snapshot(fetched_at=now(), api_base=api_base, listed=listed)
 
