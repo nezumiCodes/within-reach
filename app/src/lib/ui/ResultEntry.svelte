@@ -41,7 +41,7 @@
 >
   <span class="number" data-testid="number" aria-hidden="true">{number}</span>
   <div class="body">
-    <h3><span class="visually-hidden">{number}. </span>{p.name}</h3>
+    <h3><span class="visually-hidden">{`${number}. `}</span>{p.name}</h3>
     <p class="address">{p.address}, {p.postcode}</p>
     <p class="travel">{travelLine(result)}</p>
     {#each listed as name (name)}
