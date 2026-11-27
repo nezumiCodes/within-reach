@@ -39,6 +39,12 @@ test('a search lists pharmacies closest first, numbered from 1', async ({ page }
   await expect(results(page).first()).toContainText(/min walk · \d+ min drive/)
 })
 
+test('screen readers hear each result number apart from the pharmacy name', async ({ page }) => {
+  await search(page, PC.chester)
+  // The number is visually hidden in the heading; without its space, "1.Boots" is read as one word.
+  await expect(results(page).first().getByRole('heading', { level: 3 })).toHaveText(/^1\. \S/)
+})
+
 test('driving sort reorders the list', async ({ page }) => {
   await search(page, PC.chester)
   await page.getByLabel('Driving').check()
