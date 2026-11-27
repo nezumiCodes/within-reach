@@ -2,10 +2,13 @@
 
 import hashlib
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
 import httpx
+
+RETRY_AFTER_MAX_S = 60.0  # the longest a Retry-After header can make a 429 retry wait
 
 
 class Fetcher(Protocol):
@@ -31,6 +34,7 @@ class HttpxFetcher:
         retries: int = 5,
         backoff_s: float = 2.0,
         timeout_s: float = 60.0,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._client = httpx.Client(
             headers={"User-Agent": user_agent},
@@ -42,6 +46,21 @@ class HttpxFetcher:
         )
         self._retries = retries
         self._backoff_s = backoff_s
+        self._sleep = sleep
+
+    def _backoff(self, attempt: int) -> float:
+        return self._backoff_s * 2.0 ** (attempt - 1)
+
+    def _retry_after(self, response: httpx.Response, attempt: int) -> float:
+        """Seconds to wait after a 429: Retry-After (seconds, capped), else the backoff.
+        An HTTP-date Retry-After is treated as unparseable."""
+        try:
+            seconds = float(response.headers.get("Retry-After", ""))
+        except ValueError:
+            return self._backoff(attempt)
+        if not 0 <= seconds < float("inf"):
+            return self._backoff(attempt)
+        return min(seconds, RETRY_AFTER_MAX_S)
 
     def _get(
         self,
@@ -53,6 +72,7 @@ class HttpxFetcher:
     ) -> httpx.Response:
         headers = {**({"Accept": accept} if accept else {}), **(extra_headers or {})} or None
         for attempt in range(1, self._retries + 1):
+            wait = self._backoff(attempt)
             try:
                 response = self._client.get(
                     url, params=params, headers=headers, follow_redirects=follow_redirects
@@ -65,7 +85,9 @@ class HttpxFetcher:
                         request=response.request,
                         response=response,
                     )
-                if response.status_code < 500:
+                if response.status_code == 429:
+                    wait = self._retry_after(response, attempt)
+                elif response.status_code < 500:
                     response.raise_for_status()
                     return response
             except httpx.TransportError:
@@ -73,7 +95,7 @@ class HttpxFetcher:
                     raise
             if attempt == self._retries:
                 response.raise_for_status()
-            time.sleep(self._backoff_s * 2 ** (attempt - 1))
+            self._sleep(wait)
         raise RuntimeError("unreachable")
 
     def get_json(
@@ -108,6 +130,6 @@ class HttpxFetcher:
             except (httpx.TransportError, httpx.HTTPStatusError):
                 if attempt == self._retries:
                     raise
-                time.sleep(self._backoff_s * 2 ** (attempt - 1))
+                self._sleep(self._backoff(attempt))
         part.replace(dest)
         return digest.hexdigest()
