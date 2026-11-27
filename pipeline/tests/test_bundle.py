@@ -64,23 +64,23 @@ def test_directory_hours_cells(tmp_path: Path) -> None:
         "sat": (),
         "sun": (),
     }
-    write_directory(tmp_path / "a", [_pharmacy(hours)])
+    write_directory(tmp_path / "a", [_pharmacy(hours)], ["nsp"])
     lines = _lines(tmp_path / "a" / "pharmacies.csv.gz")
     assert lines[0] == (
-        "ph_idx,nation,code,name,address,postcode,lat,lon,mon,tue,wed,thu,fri,sat,sun"
+        "ph_idx,nation,code,name,address,postcode,lat,lon,mon,tue,wed,thu,fri,sat,sun,services"
     )
     assert lines[1] == (
         '0,England,FA002,ROWLANDS,"61 ARUNDEL AVENUE, STOCKPORT",SK7 5LD,'
         "53.370000,-2.120000,09:00-13:00;14:00-17:30,CLOSED,,CLOSED,CLOSED,"
-        "CLOSED,CLOSED"
+        "CLOSED,CLOSED,nsp"
     )
-    write_directory(tmp_path / "b", [_pharmacy(None)])
-    assert _lines(tmp_path / "b" / "pharmacies.csv.gz")[1].endswith(",,,,,,,")
+    write_directory(tmp_path / "b", [_pharmacy(None)], ["nsp?"])
+    assert _lines(tmp_path / "b" / "pharmacies.csv.gz")[1].endswith(",,,,,,,,nsp?")
 
 
 def test_gzip_deterministic(tmp_path: Path) -> None:
-    first = write_directory(tmp_path / "a", [_pharmacy(None)])
-    second = write_directory(tmp_path / "b", [_pharmacy(None)])
+    first = write_directory(tmp_path / "a", [_pharmacy(None)], [""])
+    second = write_directory(tmp_path / "b", [_pharmacy(None)], [""])
     assert first.sha256 == second.sha256
 
 

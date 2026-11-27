@@ -51,6 +51,8 @@ async function fixture() {
     directory,
     districts,
     areas: [a, b],
+    services: [],
+    reachCapM: 25000,
   }
   const served = fakeFetch(RELEASE, files)
   return {

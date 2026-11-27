@@ -6,17 +6,25 @@
   let {
     result,
     number,
+    serviceNames,
     selected,
     onSelect,
     onHighlight,
   }: {
     result: Result
     number: number
+    /** Service key to name, in the release's order. */
+    serviceNames: Record<string, string>
     selected: boolean
     onSelect: (idx: number) => void
     onHighlight: (idx: number | null) => void
   } = $props()
   const p = $derived(result.pharmacy)
+  const listed = $derived(
+    Object.entries(serviceNames)
+      .filter(([key]) => p.services[key] === 'listed')
+      .map(([, name]) => name),
+  )
 </script>
 
 <li
@@ -36,6 +44,11 @@
     <h3><span class="visually-hidden">{number}. </span>{p.name}</h3>
     <p class="address">{p.address}, {p.postcode}</p>
     <p class="travel">{travelLine(result)}</p>
+    {#each listed as name (name)}
+      <p class="services" data-testid="services">
+        <span class="visually-hidden">{'Services: '}</span>{name}
+      </p>
+    {/each}
     {#if hasAnyHours(p.days)}
       <details>
         <summary>Opening hours</summary>

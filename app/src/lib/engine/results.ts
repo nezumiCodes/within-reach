@@ -2,7 +2,7 @@
  * Search results for one postcode: building, sorting and filter grouping
  * (Phase 2 design, section 5; spec NFR-11 for tie-breaking).
  */
-import { filterStatus, type FilterKey, type Filters } from './hours'
+import { filterStatus, type FilterKey, type Filters, type HoursKey } from './hours'
 import type { Pharmacy, TravelRow } from './types'
 
 export type Result = {
@@ -19,6 +19,8 @@ export type SortMode = 'walk' | 'drive'
 export type Grouped = {
   matches: Result[]
   unknown: Result[]
+  /** What the pharmacies in `unknown` could not answer. */
+  unknownOf: Set<'hours' | 'services'>
   hidden: { result: Result; reasons: FilterKey[] }[]
 }
 
@@ -55,36 +57,65 @@ export function sortResults(results: Result[], mode: SortMode): Result[] {
   return [...results].sort(compareResults(mode))
 }
 
-/** Split sorted results into matches, hours-unknown and hidden, keeping their order. */
+/** Split sorted results into matches, not-known and hidden, keeping their order. */
 export function groupByFilters(sorted: Result[], filters: Filters): Grouped {
-  const grouped: Grouped = { matches: [], unknown: [], hidden: [] }
+  const grouped: Grouped = { matches: [], unknown: [], unknownOf: new Set(), hidden: [] }
   for (const result of sorted) {
-    const status = filterStatus(result.pharmacy.days, filters)
+    const status = filterStatus(result.pharmacy, filters)
     if (status.kind === 'match') grouped.matches.push(result)
-    else if (status.kind === 'unknown') grouped.unknown.push(result)
-    else grouped.hidden.push({ result, reasons: status.reasons })
+    else if (status.kind === 'unknown') {
+      grouped.unknown.push(result)
+      for (const of of status.of) grouped.unknownOf.add(of)
+    } else grouped.hidden.push({ result, reasons: status.reasons })
   }
   return grouped
 }
 
-const REASON_TEXT: Record<FilterKey, string> = {
+const HOURS_REASON_TEXT: Record<HoursKey, string> = {
   saturday: 'not open on Saturdays',
   sunday: 'not open on Sundays',
   late: 'not open late',
 }
-const REASON_ORDER: readonly FilterKey[] = ['saturday', 'sunday', 'late']
+const HOURS_ORDER: readonly HoursKey[] = ['saturday', 'sunday', 'late']
+const SERVICE_PREFIX = 'service:'
 
-/** For example "4 closer pharmacies hidden: not open on Sundays." */
-export function hiddenSummary(grouped: Grouped, mode: SortMode): string | null {
+/** For example "4 closer pharmacies hidden: not open on Sundays." Services follow hours. */
+export function hiddenSummary(
+  grouped: Grouped,
+  mode: SortMode,
+  serviceNames: Record<string, string>,
+): string | null {
   const n = grouped.hidden.length
   if (n === 0) return null
   const lastShown = grouped.unknown.at(-1) ?? grouped.matches.at(-1)
   const compare = compareResults(mode)
   const closer =
     lastShown === undefined || grouped.hidden.some((h) => compare(h.result, lastShown) < 0)
-  const used = new Set(grouped.hidden.flatMap((h) => h.reasons))
-  const reasons = REASON_ORDER.filter((k) => used.has(k))
-    .map((k) => REASON_TEXT[k])
-    .join(' or ')
+  const used = new Set<FilterKey>(grouped.hidden.flatMap((h) => h.reasons))
+  const hours = HOURS_ORDER.filter((k) => used.has(k)).map((k) => HOURS_REASON_TEXT[k])
+  const services = Object.entries(serviceNames)
+    .filter(([key]) => used.has(`${SERVICE_PREFIX}${key}`))
+    .map(([, name]) => `not listed for ${name.toLowerCase()}`)
+  const reasons = [...hours, ...services].join(' or ')
   return `${n} ${closer ? 'closer ' : ''}pharmac${n === 1 ? 'y' : 'ies'} hidden: ${reasons}.`
+}
+
+const DEFAULT_REACH_M = 25000
+
+/** The empty-list message: names the service when no result passes the service filters alone. */
+export function noResultsMessage(
+  sorted: Result[],
+  filters: Filters,
+  serviceNames: Record<string, string>,
+  reachCapM: number,
+): string {
+  const keys = Object.keys(serviceNames).filter((key) => filters.services[key])
+  const servicesOnly: Filters = { ...filters, saturday: false, sunday: false, late: false }
+  const anyPasses = sorted.some((r) => filterStatus(r.pharmacy, servicesOnly).kind !== 'hidden')
+  if (keys.length > 0 && !anyPasses) {
+    const names = keys.map((key) => serviceNames[key].toLowerCase()).join(' or ')
+    const reach = Number.isFinite(reachCapM) && reachCapM > 0 ? reachCapM : DEFAULT_REACH_M
+    return `No pharmacies listing ${names} were found within ${reach / 1000} km.`
+  }
+  return 'No pharmacies nearby match these filters.'
 }

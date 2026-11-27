@@ -35,10 +35,16 @@ class FakeFetcher:
 
     def __init__(self, downloads: dict[str, bytes]) -> None:
         self.downloads = downloads
-        self.json_calls: list[tuple[str, dict[str, str] | None]] = []
+        # (url, params, header names). Names only: header values may be secrets (the API key).
+        self.json_calls: list[tuple[str, dict[str, str] | None, list[str]]] = []
 
-    def get_json(self, url: str, params: dict[str, str] | None = None) -> Any:
-        self.json_calls.append((url, params))
+    def get_json(
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> Any:
+        self.json_calls.append((url, params, sorted(headers or {})))
         if "package_show" in url:
             assert params is not None
             name = {

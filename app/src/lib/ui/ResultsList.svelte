@@ -1,12 +1,16 @@
 <script lang="ts">
-  /** The numbered list, closest first, with the hours-unknown group and the hidden summary. */
+  /** The numbered list, closest first, with the not-known group and the hidden summary. */
   import type { Result } from '../engine/results'
   import ResultEntry from './ResultEntry.svelte'
 
   let {
     shown,
     unknownStartsAt,
+    unknownOf,
+    activeServices,
+    serviceNames,
     summary,
+    emptyMessage,
     total,
     selected,
     onSelect,
@@ -15,7 +19,14 @@
   }: {
     shown: Result[]
     unknownStartsAt: number | null
+    /** What the not-known pharmacies can't answer. */
+    unknownOf: Set<'hours' | 'services'>
+    /** Names of the service filters that are on. */
+    activeServices: string[]
+    /** Service key to name, for the tags on each entry. */
+    serviceNames: Record<string, string>
     summary: string | null
+    emptyMessage: string
     total: number
     selected: number | null
     onSelect: (idx: number) => void
@@ -26,18 +37,35 @@
   const split = $derived(unknownStartsAt ?? shown.length)
   const confirmed = $derived(shown.slice(0, split))
   const unknown = $derived(shown.slice(split))
+  const unknownCopy = $derived.by(() => {
+    if (unknownOf.has('services') && unknownOf.has('hours'))
+      return {
+        heading: 'Opening hours and services not known',
+        text: "Scottish and Welsh pharmacy lists don't include opening hours or services, so these pharmacies can't be filtered.",
+      }
+    if (unknownOf.has('services'))
+      return {
+        heading: `${activeServices.join(' and ')} not known`,
+        text: "Scottish and Welsh pharmacy lists don't include services, so these pharmacies can't be filtered.",
+      }
+    return {
+      heading: 'Opening hours not known',
+      text: "Scottish and Welsh pharmacy lists don't include opening hours, so these pharmacies can't be filtered.",
+    }
+  })
 </script>
 
 {#if total === 0}
-  <p class="empty">No pharmacies nearby match these filters.</p>
+  <p class="empty">{emptyMessage}</p>
 {/if}
 
 {#if confirmed.length > 0}
-  <ol class="results">
+  <ol class="results" data-testid="matches">
     {#each confirmed as result, i (result.pharmacy.idx)}
       <ResultEntry
         {result}
         number={i + 1}
+        {serviceNames}
         selected={selected === result.pharmacy.idx}
         {onSelect}
         {onHighlight}
@@ -47,16 +75,14 @@
 {/if}
 
 {#if unknownStartsAt !== null && unknown.length > 0}
-  <h3 class="group">Opening hours not known</h3>
-  <p class="note">
-    Scottish and Welsh pharmacy lists don't include opening hours, so these pharmacies can't be
-    filtered.
-  </p>
+  <h3 class="group">{unknownCopy.heading}</h3>
+  <p class="note">{unknownCopy.text}</p>
   <ol class="results">
     {#each unknown as result, i (result.pharmacy.idx)}
       <ResultEntry
         {result}
         number={split + i + 1}
+        {serviceNames}
         selected={selected === result.pharmacy.idx}
         {onSelect}
         {onHighlight}

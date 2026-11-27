@@ -25,6 +25,22 @@ geocode_failure_limit = 0.02
 distance_selling_min = 200
 distance_selling_max = 1000
 
+[services]
+# Pharmacy services from NHS England's Directory of Healthcare Services (DoHS) API, v3.
+# Off until the production key exists (needle exchange filter design, section 7).
+enabled = false
+service_min = 5
+api_base = "https://api.service.nhs.uk/service-search-api/"
+min_listed = 1000          # release check: fewer means a broken API response
+listed_tolerance = 0.20    # ±20% of the previous release
+max_missing_share = 0.10   # NHSBSA pharmacies with no DoHS record
+
+[[services.catalogue]]
+key = "nsp"
+name = "Needle exchange"
+code = "SRV0274"
+nations = ["England"]
+
 [routing]
 osrm_image = "ghcr.io/project-osrm/osrm-backend:v26.11.0-debian"
 

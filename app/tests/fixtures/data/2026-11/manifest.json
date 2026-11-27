@@ -19,20 +19,20 @@
     }
    },
    "map": {
-    "bytes": 1761086,
+    "bytes": 1760922,
     "parts": [
      {
-      "bytes": 880543,
+      "bytes": 880461,
       "path": "areas/E06000050/map.pmtiles.000",
-      "sha256": "2ae520dd9bec82ba7d094611910209e3d0a4f1a0963a82741483bb41a61d176a"
+      "sha256": "6643ae4ad2269dc2c061fef41a61de3c44c2de164788a696c381b680ed25f8d9"
      },
      {
-      "bytes": 880543,
+      "bytes": 880461,
       "path": "areas/E06000050/map.pmtiles.001",
-      "sha256": "42cc907982902df2ebc2c8de7c56ec000edb5b4c94e134f0d16ca246fa4ffd25"
+      "sha256": "c7f806d1df3f28b3f49ab3bf536e526dd1af0d10391c43fbd5d386ea7e03fe30"
      }
     ],
-    "sha256": "f3a724c016893b346dde6b518e5c375f3f037792fd0e46005d2fe61bf695e3fa"
+    "sha256": "cab7175cfbfdbc50d5d15980d5dec80991be80c05bd9149306f0a83c9f0e550b"
    },
    "name": "Cheshire West and Chester",
    "nation": "England",
@@ -57,15 +57,15 @@
     }
    },
    "map": {
-    "bytes": 1888138,
+    "bytes": 1887137,
     "parts": [
      {
-      "bytes": 1888138,
+      "bytes": 1887137,
       "path": "areas/W11000023/map.pmtiles",
-      "sha256": "96d76c322a790f622eaaeb59ca3335bbf2bf306445b5c003a9d551c1cfc1b662"
+      "sha256": "58a1c2451af018222df16165e8014e76d25a00b1e6aeaa2912eca141f33980c4"
      }
     ],
-    "sha256": "96d76c322a790f622eaaeb59ca3335bbf2bf306445b5c003a9d551c1cfc1b662"
+    "sha256": "58a1c2451af018222df16165e8014e76d25a00b1e6aeaa2912eca141f33980c4"
    },
    "name": "Betsi Cadwaladr University Health Board",
    "nation": "Wales",
@@ -93,17 +93,28 @@
   "reach_cap_m": 25000,
   "reach_max_rounds": 4,
   "router": "osrm",
+  "services": [
+   {
+    "key": "nsp",
+    "name": "Needle exchange",
+    "nations": [
+     "England"
+    ],
+    "source": "Contains information from NHS England, licensed under the current version of the Open Government Licence.",
+    "source_fetched_at": "2026-11-24T00:00:00Z"
+   }
+  ],
   "walk_profile": "foot-gb"
  },
  "directory": {
-  "bytes": 3423,
+  "bytes": 3454,
   "count_by_nation": {
    "England": 35,
    "Scotland": 0,
    "Wales": 38
   },
   "path": "pharmacies.csv.gz",
-  "sha256": "0045866764227f71bc5406dc384ba47340a1483de923be2a716f6e68eaf4a84b"
+  "sha256": "8fef25314066a030bb324b94709ab86e6f1664ce0cd81d4f9ab25da56287c256"
  },
  "districts": {
   "bytes": 75,

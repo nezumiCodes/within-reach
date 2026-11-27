@@ -20,6 +20,10 @@ export type Manifest = {
   directory: FileRef
   districts: FileRef
   areas: AreaEntry[]
+  /** Services the release carries, empty for older releases. */
+  services: { key: string; name: string }[]
+  /** How far, in metres, the pipeline looked for service pharmacies. */
+  reachCapM: number
 }
 
 const RELEASE_NAME = /^\d{4}-(0[1-9]|1[0-2])$/
@@ -69,6 +73,25 @@ function areaEntry(value: unknown): AreaEntry {
   }
 }
 
+const DEFAULT_REACH_CAP_M = 25000
+
+function serviceDefs(config: unknown): { key: string; name: string }[] {
+  if (!isRecord(config) || config.services === undefined) return []
+  if (!Array.isArray(config.services)) throw new Malformed()
+  return config.services.map((s: unknown) => {
+    if (!isRecord(s) || typeof s.key !== 'string' || typeof s.name !== 'string') {
+      throw new Malformed()
+    }
+    return { key: s.key, name: s.name }
+  })
+}
+
+function reachCap(config: unknown): number {
+  if (!isRecord(config) || config.reach_cap_m === undefined) return DEFAULT_REACH_CAP_M
+  if (typeof config.reach_cap_m !== 'number') throw new Malformed()
+  return config.reach_cap_m
+}
+
 /** The manifest of the release latest.json names, or null if anything doesn't match. */
 export function parseManifest(latest: unknown, manifest: unknown): Manifest | null {
   if (!isRecord(latest) || !isRecord(manifest)) return null
@@ -87,6 +110,8 @@ export function parseManifest(latest: unknown, manifest: unknown): Manifest | nu
       directory: fileRef(manifest.directory),
       districts: fileRef(manifest.districts),
       areas: manifest.areas.map(areaEntry),
+      services: serviceDefs(manifest.config),
+      reachCapM: reachCap(manifest.config),
     }
   } catch (error) {
     if (error instanceof Malformed) return null

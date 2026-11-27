@@ -1,4 +1,4 @@
-from within_reach_pipeline.candidates import Candidate, select_candidates
+from within_reach_pipeline.candidates import Candidate, select_candidates, select_service_candidates
 from within_reach_pipeline.models import Pharmacy, Postcode, RawPharmacy
 
 ORIGIN = Postcode("CH1 1AA", 53.19, -2.89, 400000, 400000, "England", "E06000050")
@@ -68,3 +68,47 @@ def test_fewer_pharmacies_than_min() -> None:
 
 def test_no_pharmacies() -> None:
     assert select_candidates([ORIGIN], [], 5000, 40, 5) == [[]]
+
+
+def _line(count: int) -> list[Pharmacy]:
+    """count English pharmacies due east of ORIGIN, pharmacy i at (i + 1) km."""
+    return [
+        _pharmacy("England", f"F{i:04d}", 400000 + (i + 1) * 1000, 400000) for i in range(count)
+    ]
+
+
+def test_service_candidates_count_existing() -> None:
+    pharmacies = _line(12)
+    candidates = [[Candidate(i, (i + 1) * 1000) for i in range(5)]]
+    listed = frozenset({1, 2, 3, 7, 9, 10})  # 3 already among the candidates
+    [result] = select_service_candidates([ORIGIN], pharmacies, candidates, listed, 5, 25000)
+    assert [c.ph_idx for c in result] == [7, 9]
+    assert result == [Candidate(7, 8000), Candidate(9, 10000)]
+
+
+def test_service_candidates_none_needed_when_enough_listed() -> None:
+    pharmacies = _line(12)
+    candidates = [[Candidate(i, (i + 1) * 1000) for i in range(5)]]
+    listed = frozenset({0, 1, 2, 3, 4, 8})
+    assert select_service_candidates([ORIGIN], pharmacies, candidates, listed, 5, 25000) == [[]]
+
+
+def test_service_candidates_respect_cap() -> None:
+    pharmacies = [_pharmacy("England", "F0001", 400100, 400000)]
+    pharmacies.append(_pharmacy("England", "F0002", 430000, 400000))  # 30 km
+    candidates = [[Candidate(0, 100)]]
+    assert select_service_candidates(
+        [ORIGIN], pharmacies, candidates, frozenset({1}), 5, 25000
+    ) == [[]]
+
+
+def test_service_candidates_cap_is_inclusive() -> None:
+    """Like next_candidates (widening), a pharmacy exactly at the cap is within it."""
+    pharmacies = [_pharmacy("England", "F0001", 425000, 400000)]
+    [result] = select_service_candidates([ORIGIN], pharmacies, [[]], frozenset({0}), 5, 25000)
+    assert result == [Candidate(0, 25000)]
+
+
+def test_service_candidates_without_listed() -> None:
+    pharmacies = _line(3)
+    assert select_service_candidates([ORIGIN], pharmacies, [[]], frozenset(), 5, 25000) == [[]]

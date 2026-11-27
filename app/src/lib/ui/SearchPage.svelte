@@ -7,8 +7,14 @@
   import { DownloadError, IntegrityError, SessionFiles } from '../data/files'
   import { formatRelease, loadManifest, type Manifest } from '../data/release'
   import { Searcher, type SearchOutcome } from '../data/search'
-  import { NO_FILTERS, type Filters } from '../engine/hours'
-  import { groupByFilters, hiddenSummary, sortResults, type SortMode } from '../engine/results'
+  import { anyFilter, NO_FILTERS, type Filters } from '../engine/hours'
+  import {
+    groupByFilters,
+    hiddenSummary,
+    noResultsMessage,
+    sortResults,
+    type SortMode,
+  } from '../engine/results'
   import Controls from './Controls.svelte'
   import MapPanel from './MapPanel.svelte'
   import Messages from './Messages.svelte'
@@ -25,7 +31,7 @@
   let busy = $state(false)
   let lastQuery = ''
   let mode = $state<SortMode>('walk')
-  let filters = $state<Filters>({ ...NO_FILTERS })
+  let filters = $state<Filters>({ ...NO_FILTERS, services: {} })
   let visible = $state(PAGE)
   let selected = $state<number | null>(null)
   let highlighted = $state<number | null>(null)
@@ -72,16 +78,27 @@
 
   const found = $derived(outcome?.kind === 'found' ? outcome : null)
   const sorted = $derived(found ? sortResults(found.results, mode) : [])
-  const grouped = $derived(groupByFilters(sorted, filters))
-  const anyFilter = $derived(filters.saturday || filters.sunday || filters.late)
+  const services = $derived(manifest?.services ?? [])
+  /** Only the release's own services reach the engine, so an unknown key can't be active. */
+  const active = $derived<Filters>({
+    ...filters,
+    services: Object.fromEntries(services.map((s) => [s.key, filters.services[s.key] ?? false])),
+  })
+  const grouped = $derived(groupByFilters(sorted, active))
+  const filtering = $derived(anyFilter(active))
   const listed = $derived([...grouped.matches, ...grouped.unknown])
   const shown = $derived(listed.slice(0, visible))
   const unknownStartsAt = $derived(
-    anyFilter && grouped.unknown.length > 0 && grouped.matches.length < shown.length
+    filtering && grouped.unknown.length > 0 && grouped.matches.length < shown.length
       ? grouped.matches.length
       : null,
   )
-  const summary = $derived(hiddenSummary(grouped, mode))
+  const serviceNames = $derived(Object.fromEntries(services.map((s) => [s.key, s.name])))
+  const activeServices = $derived(services.filter((s) => active.services[s.key]).map((s) => s.name))
+  const summary = $derived(hiddenSummary(grouped, mode, serviceNames))
+  const emptyMessage = $derived(
+    noResultsMessage(sorted, active, serviceNames, manifest?.reachCapM ?? 25000),
+  )
 
   const message = $derived.by(() => {
     if (busy) return 'Searching…'
@@ -129,11 +146,15 @@
         </section>
         <section class="list-column" aria-labelledby="results-heading">
           <h2 id="results-heading">Pharmacies near {found.postcode}</h2>
-          <Controls bind:mode bind:filters />
+          <Controls bind:mode bind:filters {services} />
           <ResultsList
             {shown}
             {unknownStartsAt}
+            unknownOf={grouped.unknownOf}
+            {activeServices}
+            {serviceNames}
             {summary}
+            {emptyMessage}
             total={listed.length}
             {selected}
             onSelect={(idx) => (selected = idx)}

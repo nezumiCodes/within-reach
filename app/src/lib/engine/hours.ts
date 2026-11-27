@@ -2,16 +2,19 @@
  * Opening hours and the public search filters (Phase 2 design, section 5).
  * A pharmacy whose hours can't answer a filter is "unknown", never hidden (spec FR-15).
  */
-import type { DayHours, Range } from './types'
+import type { DayHours, Pharmacy, Range } from './types'
 
-export type FilterKey = 'saturday' | 'sunday' | 'late'
-export type Filters = Record<FilterKey, boolean>
-export const NO_FILTERS: Filters = { saturday: false, sunday: false, late: false }
+export type HoursKey = 'saturday' | 'sunday' | 'late'
+export type FilterKey = HoursKey | `service:${string}`
+export type Filters = Record<HoursKey, boolean> & { services: Record<string, boolean> }
+export const NO_FILTERS: Filters = { saturday: false, sunday: false, late: false, services: {} }
 
 export type FilterStatus =
-  { kind: 'match' } | { kind: 'unknown' } | { kind: 'hidden'; reasons: FilterKey[] }
+  | { kind: 'match' }
+  | { kind: 'unknown'; of: ('hours' | 'services')[] }
+  | { kind: 'hidden'; reasons: FilterKey[] }
 
-const FILTER_ORDER: readonly FilterKey[] = ['saturday', 'sunday', 'late']
+const HOURS_ORDER: readonly HoursKey[] = ['saturday', 'sunday', 'late']
 const SATURDAY = 5
 const SUNDAY = 6
 const WEEKDAYS = [0, 1, 2, 3, 4]
@@ -49,17 +52,45 @@ function openLate(days: DayHours[]): Answer {
   return weekdays.some((d) => d.kind === 'unknown') ? 'unknown' : 'fail'
 }
 
-function answer(key: FilterKey, days: DayHours[]): Answer {
+function answer(key: HoursKey, days: DayHours[]): Answer {
   if (key === 'saturday') return openOn(days[SATURDAY])
   if (key === 'sunday') return openOn(days[SUNDAY])
   return openLate(days)
 }
 
-export function filterStatus(days: DayHours[], filters: Filters): FilterStatus {
-  const active = FILTER_ORDER.filter((key) => filters[key])
-  const answers = active.map((key) => [key, answer(key, days)] as const)
-  const reasons = answers.filter(([, a]) => a === 'fail').map(([key]) => key)
+/** A service is not listed when the pharmacy has no entry for it; 'unknown' is never hidden. */
+function serviceAnswer(pharmacy: Pharmacy, key: string): Answer {
+  const state = pharmacy.services[key]
+  if (state === undefined) return 'fail'
+  return state === 'listed' ? 'pass' : 'unknown'
+}
+
+/** Hidden if any active filter fails, otherwise unknown if any can't be answered, else a match. */
+export function filterStatus(pharmacy: Pharmacy, filters: Filters): FilterStatus {
+  const hours = HOURS_ORDER.filter((key) => filters[key]).map(
+    (key) => [key as FilterKey, 'hours' as const, answer(key, pharmacy.days)] as const,
+  )
+  const services = Object.keys(filters.services)
+    .filter((key) => filters.services[key])
+    .map(
+      (key) =>
+        [`service:${key}` as FilterKey, 'services' as const, serviceAnswer(pharmacy, key)] as const,
+    )
+  const answers = [...hours, ...services]
+  const reasons = answers.filter(([, , a]) => a === 'fail').map(([key]) => key)
   if (reasons.length > 0) return { kind: 'hidden', reasons }
-  if (answers.some(([, a]) => a === 'unknown')) return { kind: 'unknown' }
+  const unknownOf = (['hours', 'services'] as const).filter((of) =>
+    answers.some(([, from, a]) => from === of && a === 'unknown'),
+  )
+  if (unknownOf.length > 0) return { kind: 'unknown', of: unknownOf }
   return { kind: 'match' }
+}
+
+export function anyFilter(filters: Filters): boolean {
+  return (
+    filters.saturday ||
+    filters.sunday ||
+    filters.late ||
+    Object.values(filters.services).some(Boolean)
+  )
 }

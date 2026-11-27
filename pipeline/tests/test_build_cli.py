@@ -1,5 +1,8 @@
+import csv
+import gzip
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -7,7 +10,9 @@ import pytest
 from fakes import make_cache
 
 from within_reach_pipeline import cli
-from within_reach_pipeline.bundle import merge_manifests
+from within_reach_pipeline.bundle import SERVICES_ATTRIBUTION, merge_manifests
+from within_reach_pipeline.config import PipelineConfig, load_config
+from within_reach_pipeline.services import Snapshot, save_snapshot
 
 BUILT_AT = "2026-11-02T03:00:00Z"
 
@@ -199,3 +204,206 @@ def test_merge_rejects_shards_that_disagree_on_maps() -> None:
     without = {"directory": {"sha256": "a"}, "areas": [], "config": {"maps": "none"}}
     with pytest.raises(ValueError, match="maps"):
         merge_manifests(base, [with_maps, without])
+
+
+def _services_config() -> PipelineConfig:
+    return replace(load_config(), services_enabled=True)
+
+
+def _build_with(cache: Path, out: Path, *areas: str) -> dict:  # type: ignore[type-arg]
+    argv = ["build", "--cache", str(cache), "--release", "2026-11", "--out", str(out)]
+    argv += ["--router", "fake", "--built-at", BUILT_AT]
+    if areas:
+        argv += ["--areas", *areas]
+    assert cli.run(argv, config=_services_config()) == 0
+    return json.loads((out / "manifest.json").read_text())  # type: ignore[no-any-return]
+
+
+def _save_snapshot(cache: Path) -> None:
+    listed = {"FA002": frozenset({"SRV0274"}), "FZZZZ": frozenset()}  # FA001 has no DoHS record
+    save_snapshot(
+        Snapshot("2026-11-01T00:00:00Z", "https://api.service.nhs.uk/service-search-api/", listed),
+        cache / cli.SERVICES_FILE,
+    )
+
+
+def test_build_with_snapshot_writes_services(tmp_path: Path) -> None:
+    cache = make_cache(tmp_path)
+    _save_snapshot(cache)
+    manifest = _build_with(cache, tmp_path / "out", "E06000050")
+    assert manifest["config"]["services"] == [
+        {
+            "key": "nsp",
+            "name": "Needle exchange",
+            "nations": ["England"],
+            "source": SERVICES_ATTRIBUTION,
+            "source_fetched_at": "2026-11-01T00:00:00Z",
+        }
+    ]
+    assert manifest["config"]["service_min"] == 5
+    assert manifest["services"] == {"nsp": {"listed": 1, "unmatched_dohs": 1, "missing_dohs": 1}}
+    assert SERVICES_ATTRIBUTION in manifest["attribution"]
+    with gzip.open(tmp_path / "out" / "pharmacies.csv.gz", "rt") as f:
+        rows = list(csv.reader(f))
+    assert rows[0][-1] == "services"
+    cells = {r[2]: r[-1] for r in rows[1:]}
+    assert cells["FA002"] == "nsp" and cells["FA001"] == ""
+    assert all(v == "nsp?" for k, v in cells.items() if k not in ("FA002", "FA001"))
+
+
+def test_build_without_snapshot_has_empty_services(tmp_path: Path) -> None:
+    manifest = _build(make_cache(tmp_path), tmp_path / "out")
+    assert manifest["config"]["services"] == [] and manifest["services"] == {}
+    assert SERVICES_ATTRIBUTION not in manifest["attribution"]
+    with gzip.open(tmp_path / "out" / "pharmacies.csv.gz", "rt") as f:
+        assert {r[-1] for r in list(csv.reader(f))[1:]} == {""}
+
+
+def test_build_enabled_without_snapshot_fails(tmp_path: Path) -> None:
+    cache = make_cache(tmp_path)
+    with pytest.raises(FileNotFoundError, match="fetch-services"):
+        _build_with(cache, tmp_path / "out")
+
+
+def test_merge_keeps_services_fields(tmp_path: Path) -> None:
+    cache = make_cache(tmp_path)
+    _save_snapshot(cache)
+    _build_with(cache, tmp_path / "s1", "E06000050")
+    _build_with(cache, tmp_path / "s2", "S12000049", "W11000023")
+    base = _build_with(cache, tmp_path / "merged")
+    assert (
+        cli.run(
+            ["merge", "--out", str(tmp_path / "merged"), str(tmp_path / "s1"), str(tmp_path / "s2")]
+        )
+        == 0
+    )
+    merged = json.loads((tmp_path / "merged" / "manifest.json").read_text())
+    for key in ("services", "attribution"):
+        assert merged[key] == base[key]
+    assert merged["config"]["services"] == base["config"]["services"]
+    assert merged["config"]["service_min"] == base["config"]["service_min"]
+
+
+def test_area_entry_counts_service_shortfall(tmp_path: Path) -> None:
+    cache = make_cache(tmp_path)
+    off = _build(cache, tmp_path / "off", "E06000050")
+    assert off["areas"][0]["services"] == {}
+    _save_snapshot(cache)
+    on = _build_with(cache, tmp_path / "on", "E06000050")
+    # Only FA002 lists the service, so every Chester postcode is short of 5.
+    assert on["areas"][0]["services"] == {"nsp": {"postcodes_short": 3}}
+
+
+def test_build_extract_includes_service_pharmacies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pharmacy listing the service 15 km away, not a first-pass candidate, lies inside the
+    extract, and is routed."""
+    from within_reach_pipeline import build
+    from within_reach_pipeline.config import ServiceDef
+
+    boxes: list[tuple[float, float, float, float]] = []
+
+    def fake_extract(stack: object, cache: Path, bbox: tuple[float, float, float, float]) -> Path:
+        boxes.append(bbox)
+        return tmp_path / "area.osm.pbf"
+
+    def fake_map(
+        image: str, pbf: Path, points: object, config_file: Path, coastline: Path, dest: Path
+    ) -> None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"PMTiles\x03" + b"\0" * 2)
+
+    monkeypatch.setattr(build, "_area_extract", fake_extract)
+    monkeypatch.setattr(build, "build_area_map", fake_map)
+    cache = make_cache(tmp_path)
+    save_snapshot(
+        Snapshot(
+            "2026-11-01T00:00:00Z",
+            "https://api.service.nhs.uk/service-search-api/",
+            {"FW002": frozenset({"SRV0274"})},
+        ),
+        cache / cli.SERVICES_FILE,
+    )
+    # Two first-pass candidates (the Chester pharmacies); the service also covers Wales here,
+    # so FW002 in Wrexham (LL12 7AA, about 15 km from Chester) lists it.
+    config = replace(
+        load_config(),
+        services_enabled=True,
+        min_candidates=2,
+        radius_m=2500,
+        services=(ServiceDef("nsp", "Needle exchange", "SRV0274", ("England", "Wales")),),
+    )
+    out = tmp_path / "out"
+    argv = ["build", "--cache", str(cache), "--release", "2026-11", "--out", str(out)]
+    argv += ["--router", "fake", "--built-at", BUILT_AT, "--maps", "tilemaker"]
+    argv += ["--areas", "E06000050"]
+    assert cli.run(argv, config=config) == 0
+    [(min_lon, min_lat, max_lon, max_lat)] = boxes
+    fw002_lat, fw002_lon = 53.0606, -2.9779
+    assert min_lat <= fw002_lat <= max_lat and min_lon <= fw002_lon <= max_lon
+    with gzip.open(out / "pharmacies.csv.gz", "rt") as f:
+        codes = [r[2] for r in list(csv.reader(f))[1:]]
+    fw002 = codes.index("FW002")
+    with gzip.open(out / "areas" / "E06000050" / "travel.csv.gz", "rt") as f:
+        travel = list(csv.DictReader(f))
+    for pc_idx in ("0", "1", "2"):
+        rows = [r for r in travel if r["pc_idx"] == pc_idx]
+        assert str(fw002) in {r["ph_idx"] for r in rows}
+        assert len(rows) == 3  # FA001, FA002 and the service row FW002
+
+
+def test_services_leave_the_general_rows_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A service pharmacy far away widens the extract, but reach widening for the general rows
+    searches only the box it would have without services (needle exchange design, section 3).
+
+    FA002 (CH2 1AA) can't be reached, so each Chester postcode widens. Without services
+    nothing else lies in its box. With FW002 (Wrexham, 15 km) listing the service, the extract
+    reaches Wrexham, where FWF56 also lies: it must not become a general row."""
+    from within_reach_pipeline import build
+    from within_reach_pipeline.config import ServiceDef
+    from within_reach_pipeline.routing.fake import FakeRouter
+
+    fa002 = (53.2009, -2.8678)
+
+    def routers(kind: object, stack: object, pbf: object, config: object) -> tuple[object, object]:
+        return (
+            FakeRouter(build.WALK_SPEED_M_S, unreachable={fa002}),
+            FakeRouter(build.DRIVE_SPEED_M_S, unreachable={fa002}),
+        )
+
+    monkeypatch.setattr(build, "_routers", routers)
+    cache = make_cache(tmp_path)
+    save_snapshot(
+        Snapshot(
+            "2026-11-01T00:00:00Z",
+            "https://api.service.nhs.uk/service-search-api/",
+            {"FW002": frozenset({"SRV0274"})},
+        ),
+        cache / cli.SERVICES_FILE,
+    )
+    base = replace(
+        load_config(),
+        min_candidates=2,
+        radius_m=2500,
+        services=(ServiceDef("nsp", "Needle exchange", "SRV0274", ("England", "Wales")),),
+    )
+
+    def travel(enabled: bool) -> dict[str, set[str]]:
+        out = tmp_path / f"out-{enabled}"
+        argv = ["build", "--cache", str(cache), "--release", "2026-11", "--out", str(out)]
+        argv += ["--router", "fake", "--built-at", BUILT_AT, "--areas", "E06000050"]
+        assert cli.run(argv, config=replace(base, services_enabled=enabled)) == 0
+        with gzip.open(out / "pharmacies.csv.gz", "rt") as f:
+            codes = {r["ph_idx"]: r["code"] for r in csv.DictReader(f)}
+        rows: dict[str, set[str]] = {}
+        with gzip.open(out / "areas" / "E06000050" / "travel.csv.gz", "rt") as f:
+            for r in csv.DictReader(f):
+                rows.setdefault(r["pc_idx"], set()).add(codes[r["ph_idx"]])
+        return rows
+
+    off, on = travel(False), travel(True)
+    assert off == {pc: {"FA001"} for pc in ("0", "1", "2")}
+    assert on == {pc: {"FA001", "FW002"} for pc in ("0", "1", "2")}  # plus the service row only

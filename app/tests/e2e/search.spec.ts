@@ -12,6 +12,7 @@ const PC = {
   wrexham: 'LL11 1AL', // Welsh: no opening hours
   twoArea: 'SY14 9ZZ', // district mapped to both areas; postcode in the second
   cycle: 'CH4 7DJ', // Lache: every way out on foot uses a cycle path not signed for walkers
+  noNeedleExchange: 'CH2 4FE', // all nearby pharmacies English, none marked in the fixture
 }
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
@@ -69,6 +70,67 @@ test('Welsh pharmacies stay listed under Opening hours not known when a filter i
   ).toBeVisible()
   await expect(results(page)).toHaveCount(10)
   await expect(results(page).first()).toContainText('No opening hours included')
+})
+
+test('Needle exchange hides pharmacies that do not list it', async ({ page }) => {
+  test.skip(!!process.env.LIVE_URL, 'the fixture marks made-up needle exchange pharmacies')
+  await search(page, PC.chester)
+  await expect(page.getByRole('group', { name: 'Services' })).toBeVisible()
+  await page.getByLabel('Needle exchange').check()
+  // Only the 3 made-up listings are confirmed; a Welsh pharmacy may follow under "not known".
+  await expect(page.getByTestId('matches').getByTestId('result')).toHaveCount(3)
+  await expect(page.getByTestId('hidden-summary')).toHaveText(
+    /^\d+ closer pharmac(y|ies) hidden: not listed for needle exchange\.$/,
+  )
+  await expect(results(page).first().getByTestId('services')).toHaveText(
+    'Services: Needle exchange',
+  )
+  await expect(
+    page.getByText(
+      "From pharmacies' NHS website listings. Some pharmacies that offer it don't list it. Phone to check.",
+    ),
+  ).toBeVisible()
+  await expect(page.getByText('Filters: Needle exchange')).toBeVisible()
+})
+
+test('Welsh pharmacies show under Needle exchange not known', async ({ page }) => {
+  test.skip(!!process.env.LIVE_URL, 'the fixture marks made-up needle exchange pharmacies')
+  await search(page, PC.wrexham)
+  await page.getByLabel('Needle exchange').check()
+  await expect(page.getByRole('heading', { name: 'Needle exchange not known' })).toBeVisible()
+  await expect(
+    page.getByText(
+      "Scottish and Welsh pharmacy lists don't include services, so these pharmacies can't be filtered.",
+    ),
+  ).toBeVisible()
+  await page.getByLabel('Open late').check()
+  await expect(
+    page.getByRole('heading', { name: 'Opening hours and services not known' }),
+  ).toBeVisible()
+})
+
+test('no pharmacy listing needle exchange within reach says so', async ({ page }) => {
+  test.skip(!!process.env.LIVE_URL, 'the fixture marks made-up needle exchange pharmacies')
+  await search(page, PC.noNeedleExchange)
+  await page.getByLabel('Needle exchange').check()
+  await expect(results(page)).toHaveCount(0)
+  await expect(
+    page.getByText('No pharmacies listing needle exchange were found within 25 km.'),
+  ).toBeVisible()
+})
+
+test('a release without services shows no Services filter or service tags', async ({ page }) => {
+  await page.route('**/manifest.json', async (route) => {
+    const response = await route.fetch()
+    const manifest = await response.json()
+    delete manifest.config.services
+    await route.fulfill({ response, json: manifest })
+  })
+  await page.goto('/')
+  await search(page, PC.chester)
+  await expect(results(page)).toHaveCount(10)
+  await expect(page.getByRole('group', { name: 'Services' })).toHaveCount(0)
+  await expect(page.getByTestId('services')).toHaveCount(0)
 })
 
 test('Show 10 more adds entries until all are shown', async ({ page }) => {
@@ -193,6 +255,7 @@ test('results page passes axe, with a filter on and with an error', async ({
   // Firefox still runs the at-rest axe scan in site.spec.ts and every functional test here.
   test.skip(browserName === 'firefox', 'Playwright Firefox driver crashes during this scan')
   await search(page, PC.chester)
+  await page.getByLabel('Needle exchange').check()
   await page.getByLabel('Open Sunday').check()
   await results(page).first().getByText('Opening hours').click()
   const withResults = await new AxeBuilder({ page }).withTags(WCAG).analyze()

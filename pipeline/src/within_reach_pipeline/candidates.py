@@ -86,3 +86,44 @@ def next_candidates(
     ]
     found.sort(key=lambda c: (c.straight_m, c.ph_idx))
     return found[:count]
+
+
+def select_service_candidates(
+    postcodes: Sequence[Postcode],
+    pharmacies: Sequence[Pharmacy],
+    candidates: Sequence[list[Candidate]],
+    listed: frozenset[int],
+    count: int,
+    cap_m: int,
+) -> list[list[Candidate]]:
+    """Pharmacies listing a service to add to each postcode's candidates (needle exchange
+    design, section 3). count is a total: listed pharmacies already among the candidates count
+    towards it, and only the shortfall is added, nearest first, within cap_m (straight line,
+    inclusive like next_candidates)."""
+    if not postcodes:
+        return []
+    if not listed or count <= 0:
+        return [[] for _ in postcodes]
+    members = sorted(listed)
+    tree = cKDTree(np.array([(pharmacies[i].east, pharmacies[i].north) for i in members], float))
+    points = np.array([(p.east, p.north) for p in postcodes], dtype=float)
+    # The nearest count listed pharmacies hold at most `already` candidates, so count is enough
+    # to find the shortfall (count - already); twice that leaves room for pharmacies whose
+    # rounded distances tie at the edge, which the (straight_m, ph_idx) sort then orders.
+    k = min(2 * count, len(members))
+    distances, indexes = _query(tree, points, k, float(np.nextafter(float(cap_m), np.inf)))
+    results: list[list[Candidate]] = []
+    for row in range(len(postcodes)):
+        have = {c.ph_idx for c in candidates[row]}
+        needed = count - len(have & listed)
+        if needed <= 0:
+            results.append([])
+            continue
+        found = [
+            Candidate(members[int(i)], round(float(d)))
+            for d, i in zip(distances[row], indexes[row], strict=True)
+            if i < len(members) and members[int(i)] not in have
+        ]
+        found.sort(key=lambda c: (c.straight_m, c.ph_idx))
+        results.append(found[:needed])
+    return results

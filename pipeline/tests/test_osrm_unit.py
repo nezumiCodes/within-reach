@@ -17,7 +17,12 @@ class RecordingFetcher:
         self.response = response
         self.urls: list[str] = []
 
-    def get_json(self, url: str, params: dict[str, str] | None = None) -> Any:
+    def get_json(
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> Any:
         self.urls.append(url)
         return self.response
 

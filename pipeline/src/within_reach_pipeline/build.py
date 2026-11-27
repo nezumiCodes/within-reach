@@ -11,12 +11,13 @@ from typing import Any, Literal
 
 from within_reach_pipeline.bundle import (
     ATTRIBUTION,
+    SERVICES_ATTRIBUTION,
     write_area,
     write_directory,
     write_district_index,
     write_manifest,
 )
-from within_reach_pipeline.candidates import select_candidates
+from within_reach_pipeline.candidates import Candidate, select_candidates, select_service_candidates
 from within_reach_pipeline.config import PipelineConfig
 from within_reach_pipeline.http import HttpxFetcher
 from within_reach_pipeline.maps import MAP_CONFIG, build_area_map, write_map_entry
@@ -30,6 +31,7 @@ from within_reach_pipeline.reach import route_reachable
 from within_reach_pipeline.routing import WALK_PROFILE, Router, TravelRow
 from within_reach_pipeline.routing.fake import FakeRouter
 from within_reach_pipeline.routing.osrm import BBox, area_bbox
+from within_reach_pipeline.services import ServiceAssignment, assign_services, load_snapshot
 
 log = logging.getLogger(__name__)
 RouterKind = Literal["osrm", "fake"]
@@ -48,6 +50,18 @@ def _area_extract(stack: ExitStack, cache: Path, bbox: BBox) -> Path:
 def _inside(bbox: BBox, pharmacy: Pharmacy) -> bool:
     min_lon, min_lat, max_lon, max_lat = bbox
     return min_lon <= pharmacy.lon <= max_lon and min_lat <= pharmacy.lat <= max_lat
+
+
+def _box(
+    postcodes: Sequence[Postcode],
+    pharmacies: Sequence[Pharmacy],
+    *candidate_sets: Sequence[list[Candidate]],
+) -> BBox:
+    """The box around the postcodes and every pharmacy in the candidate sets, with margin."""
+    used = {c.ph_idx for rows in candidate_sets for row in rows for c in row}
+    points = [(p.lat, p.lon) for p in postcodes]
+    points += [(pharmacies[i].lat, pharmacies[i].lon) for i in sorted(used)]
+    return area_bbox(points)
 
 
 def _routers(
@@ -82,6 +96,25 @@ def postcodes_without_walk(rows: Sequence[TravelRow]) -> int:
     return sum(1 for ok in walkable.values() if not ok)
 
 
+def _service_extras(
+    postcodes: Sequence[Postcode],
+    pharmacies: Sequence[Pharmacy],
+    candidates: Sequence[list[Candidate]],
+    assignment: ServiceAssignment,
+    config: PipelineConfig,
+) -> list[list[Candidate]]:
+    """Per postcode, the pharmacies listing each service to add to its candidates (one entry
+    per pharmacy, even if it lists several services). Empty when services are off."""
+    extras: list[dict[int, Candidate]] = [{} for _ in postcodes]
+    for members in assignment.listed.values():
+        chosen = select_service_candidates(
+            postcodes, pharmacies, candidates, members, config.service_min, config.reach_cap_m
+        )
+        for i, row in enumerate(chosen):
+            extras[i].update((c.ph_idx, c) for c in row)
+    return [sorted(e.values(), key=lambda c: (c.straight_m, c.ph_idx)) for e in extras]
+
+
 def build_release(
     cache: Path,
     release: str,
@@ -99,6 +132,7 @@ def build_release(
         ODS_WALES_FILE,
         ONSPD_DIR,
         PHS_FILE,
+        SERVICES_FILE,
         onspd_csv,
     )
 
@@ -122,7 +156,16 @@ def build_release(
     )
 
     out.mkdir(parents=True, exist_ok=True)
-    directory_info = write_directory(out, pharmacies)
+    snapshot = None
+    if config.services_enabled:
+        snapshot = load_snapshot(cache / SERVICES_FILE)
+        if snapshot is None:
+            raise FileNotFoundError(
+                f"services are enabled but {cache / SERVICES_FILE} is missing: "
+                "run fetch-services first"
+            )
+    assignment = assign_services(pharmacies, config.services, snapshot)
+    directory_info = write_directory(out, pharmacies, assignment.cells)
     districts_info = write_district_index(out, postcodes)
     names = read_area_names(cache / ONSPD_DIR / "Documents")
 
@@ -139,13 +182,16 @@ def build_release(
             config.max_candidates,
             config.min_candidates,
         )
-        used = sorted({c.ph_idx for row in candidates for c in row})
-        points = [(p.lat, p.lon) for p in area_postcodes]
-        points += [(pharmacies[i].lat, pharmacies[i].lon) for i in used]
-        # The extract is sized from the first-pass candidates; widening only adds pharmacies
-        # inside it, because nothing outside can be routed.
-        bbox = area_bbox(points)
-        allowed = {i for i, p in enumerate(pharmacies) if _inside(bbox, p)}
+        extras = _service_extras(area_postcodes, pharmacies, candidates, assignment, config)
+        # The extract is sized from the first-pass candidates and the service extras, so both
+        # can be routed and shown on the map; widening only adds pharmacies inside it, because
+        # nothing outside can be routed. Reach widening for the general rows searches only the
+        # box the first-pass candidates give, as with services off, so services never change
+        # which general pharmacies a postcode keeps (the Allhallows case, ME3 9QE).
+        general_bbox = _box(area_postcodes, pharmacies, candidates)
+        bbox = _box(area_postcodes, pharmacies, candidates, extras)
+        allowed = {i for i, p in enumerate(pharmacies) if _inside(general_bbox, p)}
+        service_allowed = {i for i, p in enumerate(pharmacies) if _inside(bbox, p)}
         map_entry: dict[str, Any] | None = None
         with ExitStack() as stack:
             needs_extract = router == "osrm" or maps == "tilemaker"
@@ -158,11 +204,15 @@ def build_release(
                 walk,
                 drive,
                 allowed=allowed,
+                service_allowed=service_allowed,
                 min_reachable=config.min_candidates,
                 max_candidates=config.max_candidates,
                 cap_m=config.reach_cap_m,
                 max_rounds=config.reach_max_rounds,
                 cycle_min_extra_m=config.cycle_note_min_extra_m,
+                service_extras=extras,
+                services=assignment.listed,
+                service_min=config.service_min,
             )
             rows = reach.rows
             final_used = sorted({r.ph_idx for r in rows})
@@ -191,6 +241,10 @@ def build_release(
                 "postcodes_without_walk": postcodes_without_walk(rows),
                 "postcodes_without_route": postcodes_without_route(rows),
                 "postcodes_widened_to_cap": len(reach.widened_to_cap),
+                "services": {
+                    key: {"postcodes_short": len(short)}
+                    for key, short in reach.service_short.items()
+                },
                 "files": {"postcodes": postcode_info.as_dict(), "travel": travel_info.as_dict()},
                 **({"map": map_entry} if map_entry is not None else {}),
             }
@@ -215,8 +269,24 @@ def build_release(
             "cycle_note_min_extra_m": config.cycle_note_min_extra_m,
             "router": router,
             "maps": maps,
+            "services": [
+                {
+                    "key": d.key,
+                    "name": d.name,
+                    "nations": list(d.nations),
+                    "source": SERVICES_ATTRIBUTION,
+                    "source_fetched_at": snapshot.fetched_at,
+                }
+                for d in config.services
+            ]
+            if snapshot is not None
+            else [],
+            "service_min": config.service_min if snapshot is not None else 0,
         },
-        "attribution": ATTRIBUTION,
+        "attribution": [*ATTRIBUTION, SERVICES_ATTRIBUTION]
+        if snapshot is not None
+        else ATTRIBUTION,
+        "services": assignment.counts,
         "directory": {**directory_info.as_dict(), "count_by_nation": count_by_nation},
         "districts": districts_info.as_dict(),
         "geocode_failures": [

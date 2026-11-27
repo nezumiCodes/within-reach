@@ -80,7 +80,12 @@ class FakeFetcher:
         }
         self.detail_calls: list[str] = []
 
-    def get_json(self, url: str, params: dict[str, str] | None = None) -> Any:
+    def get_json(
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> Any:
         if url.endswith("/organisations"):
             assert params is not None
             assert params["PrimaryRoleId"] == "RO182"

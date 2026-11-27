@@ -1,6 +1,11 @@
 # Hand-checked reference postcodes (Task 10). See README.md in this folder.
 # nearest: the 3 nearest pharmacies on foot, in any order. walk_m_range: the
 # shortest walk, +/-15% of the November 2026 value.
+#
+# A service case has `service` (a configured key), `min_rows` and `beyond_m` instead of (or as
+# well as) the above: the postcode needs at least min_rows travel rows listing that service with
+# straight_m > beyond_m and a walk or drive route. Service checks are skipped while
+# `[services] enabled = false`.
 
 [[case]]
 # Chester centre: Superdrug Pharmacy CH1 2HA 70 m; Boots CH1 1NA 362 m; Tesco Instore Pharmacy CH1 3JS 453 m
@@ -82,3 +87,26 @@ walk_m_range = [3323, 4495]
 postcode = "ME3 9EJ"
 nearest = ["England:FEM57", "England:FJE35"]
 walk_m_range = [7819, 10579]
+
+[[case]]
+# Malpas outskirts (added Nov 2026, needle exchange): expected to have no pharmacy within 5 km
+# that lists needle exchange, so at least 5 listing it are routed from further away.
+# Chosen on 26 Nov 2026 from a test snapshot: recheck on the first production run.
+postcode = "SY14 8JA"
+service = "nsp"
+min_rows = 5
+beyond_m = 5000
+
+[[case]]
+# Chester centre (added Nov 2026, needle exchange): gains needle exchange rows without losing
+# any of its nearest pharmacies. All 17 pharmacies within 5 km are kept (no Chester postcode
+# has more than 20, so the 40 cap never applies here), plus at least 3 beyond 5 km that list it.
+# Nearest on foot (from the public pharmacy lists): Superdrug Pharmacy CH1 2HA 85 m; Tesco
+# Instore Pharmacy CH1 3JS 299 m; Boots CH1 1NA 309 m.
+# Chosen on 26 Nov 2026 from a test snapshot: recheck on the first production run.
+postcode = "CH1 2DY"
+nearest = ["England:FY420", "England:FXP75", "England:FT378"]
+walk_m_range = [72, 98]
+service = "nsp"
+min_rows = 3
+beyond_m = 5000
