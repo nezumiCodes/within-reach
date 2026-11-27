@@ -120,6 +120,19 @@ def test_short_count_writes_no_snapshot(tmp_path: Path) -> None:
     assert not (tmp_path / SERVICES_FILE).exists()
 
 
+def test_duplicate_ods_codes_take_the_union_of_services() -> None:
+    page = {
+        "@odata.count": 3,
+        "value": [
+            {"ODSCode": "FX001", "Services": [{"ServiceCode": "SRV0274"}]},
+            {"ODSCode": "fx001", "Services": [{"ServiceCode": "SRV0001"}]},
+            {"ODSCode": "FX001", "Services": None},
+        ],
+    }
+    snap = fetch_snapshot(DohsFake([page]), BASE, KEY, sleep=lambda s: None)
+    assert snap.listed == {"FX001": frozenset({"SRV0274", "SRV0001"})}
+
+
 def test_fetch_snapshot_pauses_between_pages_only() -> None:
     pauses: list[float] = []
     fetch_snapshot(DohsFake(_pages()), BASE, KEY, sleep=pauses.append)

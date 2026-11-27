@@ -83,7 +83,9 @@ def fetch_snapshot(
         received += len(records)
         for record in records:
             code = str(record["ODSCode"]).strip().upper()
-            listed[code] = frozenset(_service_code(s) for s in record.get("Services") or [])
+            codes = frozenset(_service_code(s) for s in record.get("Services") or [])
+            # An ODS code can have more than one DoHS record: keep every service any of them lists.
+            listed[code] = listed.get(code, frozenset()) | codes
         if len(records) < PAGE_SIZE:
             break
         skip += PAGE_SIZE
